@@ -1,3 +1,5 @@
 SDLC.md
 .vscode/
 target/
+.env
+vscode/
