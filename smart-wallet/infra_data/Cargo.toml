@@ -1,0 +1,18 @@
+[package]
+name = "infra_data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+core_business = { path = "../core_business" }
+sqlx          = { workspace = true }
+tokio         = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+uuid          = { workspace = true }
+chrono        = { workspace = true }
+secrecy       = { workspace = true }
+async-trait   = { workspace = true }
+bcrypt        = { workspace = true }
+tracing       = { workspace = true }
+thiserror     = { workspace = true }

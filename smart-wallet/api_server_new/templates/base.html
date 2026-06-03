@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Wallet{% block title %}{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    nav {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    nav .brand {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #7c83ff;
+      text-decoration: none;
+    }
+
+    nav .nav-links a {
+      color: #94a3b8;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    nav .nav-links a:hover { color: #e2e8f0; }
+
+    .container {
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin-bottom: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input, select {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 0.65rem 1rem;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus { border-color: #7c83ff; }
+
+    button, .btn {
+      background: #7c83ff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    button:hover, .btn:hover { background: #5c63e0; }
+
+    .btn-danger { background: #e05c6c; }
+    .btn-danger:hover { background: #c0394a; }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid #2d3148;
+      color: #94a3b8;
+    }
+
+    .btn-secondary:hover { border-color: #7c83ff; color: #e2e8f0; }
+
+    .alert {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .alert-error { background: #2d1b1e; border: 1px solid #e05c6c; color: #f87171; }
+    .alert-success { background: #1b2d1e; border: 1px solid #5ce07c; color: #4ade80; }
+
+    label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.35rem; }
+
+    .form-group { margin-bottom: 0.25rem; }
+
+    .text-center { text-align: center; }
+    .mt-1 { margin-top: 0.5rem; }
+    .mt-2 { margin-top: 1rem; }
+
+    a { color: #7c83ff; }
+    a:hover { color: #a5abff; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">💰 Smart Wallet</a>
+    <div class="nav-links">
+      <a href="/assets">Assets</a>
+      <a href="/wallet">Wallet</a>
+      <a href="/logout" onclick="return confirm('Logout?')">Logout</a>
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

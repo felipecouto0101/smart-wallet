@@ -1,0 +1,41 @@
+[package]
+name = "api_server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "api_server"
+path = "src/main.rs"
+
+[dependencies]
+core_business = { path = "../core_business" }
+infra_data    = { path = "../infra_data" }
+
+axum               = { workspace = true }
+askama             = { workspace = true }
+askama_axum        = { workspace = true }
+tokio              = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+sqlx               = { workspace = true }
+secrecy            = { workspace = true }
+validator          = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+color-eyre         = { workspace = true }
+dotenvy            = "0.15"
+jsonwebtoken       = { workspace = true }
+uuid               = { workspace = true }
+chrono             = { workspace = true }
+async-trait        = { workspace = true }
+thiserror          = { workspace = true }
+tower-http         = { workspace = true }
+tower              = { version = "0.4", default-features = false, features = ["util"] }
+time               = { version = "0.3", default-features = false }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+claim             = { workspace = true }
+mockall           = { workspace = true }
+reqwest           = { version = "0.12", default-features = false, features = ["json", "cookies"] }
+tokio             = { workspace = true }

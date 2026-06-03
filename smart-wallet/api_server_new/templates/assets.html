@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %} — Assets{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Market Prices</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #2d3148;">
+        <th style="text-align:left;padding:0.75rem;color:#94a3b8;font-weight:500;">Asset</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Price (BRL)</th>
+        <th style="text-align:center;padding:0.75rem;color:#94a3b8;font-weight:500;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for asset in assets %}
+      <tr style="border-bottom:1px solid #1e2133;">
+        <td style="padding:0.85rem;">
+          <span style="font-weight:600;">{{ asset.symbol }}</span>
+          <span style="color:#94a3b8;margin-left:0.5rem;font-size:0.85rem;">{{ asset.name }}</span>
+        </td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">
+          R$ {{ asset.price_display }}
+        </td>
+        <td style="padding:0.85rem;text-align:center;">
+          <button
+            class="btn"
+            style="padding:0.4rem 1rem;font-size:0.85rem;"
+            onclick="openBuyModal('{{ asset.symbol }}', '{{ asset.name }}', '{{ asset.price_display }}', {{ asset.price_cents }})"
+          >Buy</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Buy Modal -->
+<div id="buy-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:2rem;width:100%;max-width:420px;margin:1rem;">
+    <h3 id="modal-title" style="margin-bottom:1.5rem;font-size:1.1rem;">
+      Buy <span id="modal-asset-name"></span>
+    </h3>
+
+    <div style="background:#0f1117;border-radius:8px;padding:1rem;margin-bottom:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+      <span style="color:#94a3b8;font-size:0.85rem;">Symbol</span>
+      <span id="modal-symbol" style="text-align:right;font-weight:700;color:#7c83ff;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Unit price</span>
+      <span id="modal-price" style="text-align:right;font-family:monospace;color:#4ade80;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Total cost</span>
+      <span id="modal-total" style="text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;"></span>
+    </div>
+
+    <form method="POST" action="/wallet/buy">
+      <input type="hidden" name="symbol" id="modal-input-symbol"/>
+      <div class="form-group">
+        <label for="modal-qty">Quantity</label>
+        <input
+          type="number"
+          id="modal-qty"
+          name="quantity"
+          step="any"
+          value="1"
+          required
+          oninput="sanitizeQty(this); updateTotal()"
+        />
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:0.5rem;">
+        <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeBuyModal()">Cancel</button>
+        <button type="submit" style="flex:2;">Confirm Purchase</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  var _priceCents = 0;
+
+  function sanitizeQty(input) {
+    var v = parseFloat(input.value.replace(',', '.'));
+    if (isNaN(v) || v <= 0) input.value = 0.001;
+  }
+
+  function openBuyModal(symbol, name, priceDisplay, priceCents) {
+    _priceCents = priceCents;
+    document.getElementById('modal-asset-name').textContent = name;
+    document.getElementById('modal-symbol').textContent = symbol;
+    document.getElementById('modal-price').textContent = 'R$ ' + priceDisplay;
+    document.getElementById('modal-input-symbol').value = symbol;
+    document.getElementById('modal-qty').value = 1;
+    updateTotal();
+    var modal = document.getElementById('buy-modal');
+    modal.style.display = 'flex';
+    document.getElementById('modal-qty').focus();
+  }
+
+  function closeBuyModal() {
+    document.getElementById('buy-modal').style.display = 'none';
+  }
+
+  function updateTotal() {
+    var qty = parseFloat(document.getElementById('modal-qty').value) || 0;
+    var totalCents = Math.round(_priceCents * qty);
+    var reais = Math.floor(totalCents / 100);
+    var centavos = totalCents % 100;
+    var reaisStr = reais.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    document.getElementById('modal-total').textContent = 'R$ ' + reaisStr + ',' + String(centavos).padStart(2, '0');
+  }
+
+  // Close on backdrop click
+  document.getElementById('buy-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeBuyModal();
+  });
+
+  // Close on Escape key, arrow keys adjust by 0.001
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeBuyModal(); return; }
+    var qty = document.getElementById('modal-qty');
+    if (document.activeElement === qty) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        var v = parseFloat(qty.value.replace(',', '.')) || 0;
+        var step = 0.001;
+        v = e.key === 'ArrowUp' ? v + step : v - step;
+        v = Math.round(v * 1e8) / 1e8; // avoid floating point drift
+        qty.value = v > 0 ? v : 0.001;
+        updateTotal();
+      }
+    }
+  });
+</script>
+{% endblock %}

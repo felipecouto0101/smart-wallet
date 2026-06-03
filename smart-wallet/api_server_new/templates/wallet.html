@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %} — Wallet{% endblock %}
+
+{% block content %}
+
+{% if let Some(msg) = message %}
+  <div class="alert alert-success">{{ msg }}</div>
+{% endif %}
+{% if let Some(err) = error %}
+  <div class="alert alert-error">{{ err }}</div>
+{% endif %}
+
+<div class="card">
+  <h2>Balance</h2>
+  <p style="font-size:2rem;font-weight:700;color:#4ade80;">R$ {{ balance_display }}</p>
+</div>
+
+<div class="card">
+  <h2>Positions</h2>
+  {% if positions.is_empty() %}
+    <p style="color:#94a3b8;">No positions yet. <a href="/assets">Buy some assets</a>.</p>
+  {% else %}
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #2d3148;">
+        <th style="text-align:left;padding:0.75rem;color:#94a3b8;font-weight:500;">Asset</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Quantity</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Unit Price</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Value</th>
+        <th style="text-align:center;padding:0.75rem;color:#94a3b8;font-weight:500;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pos in positions %}
+      <tr style="border-bottom:1px solid #1e2133;">
+        <td style="padding:0.85rem;font-weight:600;">{{ pos.symbol }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;">{{ pos.quantity }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">R$ {{ pos.price_display }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ {{ pos.total_display }}</td>
+        <td style="padding:0.85rem;text-align:center;">
+          <button
+            class="btn btn-danger"
+            style="padding:0.4rem 1rem;font-size:0.85rem;"
+            onclick="openSellModal('{{ pos.symbol }}', '{{ pos.quantity }}', '{{ pos.price_display }}', {{ pos.price_cents }})"
+          >Sell</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+  <div class="card">
+    <h2>Buy Asset</h2>
+    <form method="POST" action="/wallet/buy">
+      <div class="form-group">
+        <label>Symbol</label>
+        <select name="symbol">
+          <option value="BTC">BTC — Bitcoin</option>
+          <option value="ETH">ETH — Ethereum</option>
+          <option value="SOL">SOL — Solana</option>
+          <option value="USD">USD — Dollar</option>
+          <option value="BRL">BRL — Real</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quantity</label>
+        <input type="number" name="quantity" step="any" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
+      </div>
+      <button type="submit">Buy</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Sell Asset</h2>
+    <form method="POST" action="/wallet/sell">
+      <div class="form-group">
+        <label>Symbol</label>
+        <select name="symbol">
+          <option value="BTC">BTC — Bitcoin</option>
+          <option value="ETH">ETH — Ethereum</option>
+          <option value="SOL">SOL — Solana</option>
+          <option value="USD">USD — Dollar</option>
+          <option value="BRL">BRL — Real</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quantity</label>
+        <input type="number" name="quantity" step="any" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
+      </div>
+      <button type="submit" class="btn-danger">Sell</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Order History</h2>
+  {% if orders.is_empty() %}
+    <p style="color:#94a3b8;">No orders yet.</p>
+  {% else %}
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #2d3148;">
+        <th style="text-align:left;padding:0.75rem;color:#94a3b8;font-weight:500;">Type</th>
+        <th style="text-align:left;padding:0.75rem;color:#94a3b8;font-weight:500;">Asset</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Quantity</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Unit Price</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr style="border-bottom:1px solid #1e2133;">
+        <td style="padding:0.85rem;">
+          {% if order.is_buy %}
+            <span style="color:#4ade80;">BUY</span>
+          {% else %}
+            <span style="color:#f87171;">SELL</span>
+          {% endif %}
+        </td>
+        <td style="padding:0.85rem;font-weight:600;">{{ order.symbol }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;">{{ order.quantity }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#94a3b8;">R$ {{ order.unit_price_display }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ {{ order.total_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<!-- Sell Modal -->
+<div id="sell-modal" role="dialog" aria-modal="true" aria-labelledby="sell-modal-title"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:2rem;width:100%;max-width:420px;margin:1rem;">
+    <h3 id="sell-modal-title" style="margin-bottom:1.5rem;font-size:1.1rem;">
+      Sell <span id="sell-modal-symbol-name"></span>
+    </h3>
+
+    <div style="background:#0f1117;border-radius:8px;padding:1rem;margin-bottom:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+      <span style="color:#94a3b8;font-size:0.85rem;">Symbol</span>
+      <span id="sell-modal-symbol" style="text-align:right;font-weight:700;color:#e05c6c;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Available</span>
+      <span id="sell-modal-available" style="text-align:right;font-family:monospace;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Unit price</span>
+      <span id="sell-modal-price" style="text-align:right;font-family:monospace;color:#4ade80;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Total to receive</span>
+      <span id="sell-modal-total" style="text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;"></span>
+    </div>
+
+    <form method="POST" action="/wallet/sell">
+      <input type="hidden" name="symbol" id="sell-modal-input-symbol"/>
+      <div class="form-group">
+        <label for="sell-modal-qty">Quantity</label>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+          <button type="button" onclick="setSellPct(25)" style="flex:1;padding:0.4rem;font-size:0.8rem;background:#1e2133;border:1px solid #2d3148;border-radius:6px;color:#94a3b8;cursor:pointer;" onmouseover="this.style.borderColor='#e05c6c';this.style.color='#e2e8f0'" onmouseout="this.style.borderColor='#2d3148';this.style.color='#94a3b8'">25%</button>
+          <button type="button" onclick="setSellPct(50)" style="flex:1;padding:0.4rem;font-size:0.8rem;background:#1e2133;border:1px solid #2d3148;border-radius:6px;color:#94a3b8;cursor:pointer;" onmouseover="this.style.borderColor='#e05c6c';this.style.color='#e2e8f0'" onmouseout="this.style.borderColor='#2d3148';this.style.color='#94a3b8'">50%</button>
+          <button type="button" onclick="setSellPct(75)" style="flex:1;padding:0.4rem;font-size:0.8rem;background:#1e2133;border:1px solid #2d3148;border-radius:6px;color:#94a3b8;cursor:pointer;" onmouseover="this.style.borderColor='#e05c6c';this.style.color='#e2e8f0'" onmouseout="this.style.borderColor='#2d3148';this.style.color='#94a3b8'">75%</button>
+          <button type="button" onclick="setSellPct(100)" style="flex:1;padding:0.4rem;font-size:0.8rem;background:#1e2133;border:1px solid #e05c6c;border-radius:6px;color:#e05c6c;cursor:pointer;font-weight:600;" onmouseover="this.style.background='#e05c6c';this.style.color='#fff'" onmouseout="this.style.background='#1e2133';this.style.color='#e05c6c'">MAX</button>
+        </div>
+        <input
+          type="number"
+          id="sell-modal-qty"
+          name="quantity"
+          step="any"
+          required
+          oninput="sanitizeSellQty(this); updateSellTotal()"
+        />
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:0.5rem;">
+        <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeSellModal()">Cancel</button>
+        <button type="submit" class="btn-danger" style="flex:2;">Confirm Sale</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  var _sellPriceCents = 0;
+  var _sellAvailable = 0;
+  var _sellStep = 0.001;
+
+  function openSellModal(symbol, available, priceDisplay, priceCents) {
+    _sellPriceCents = Number(priceCents);
+    _sellAvailable = parseFloat(String(available).replace(',', '.'));
+    // step = smallest meaningful increment (1 significant digit of available)
+    var mag = Math.pow(10, Math.floor(Math.log10(_sellAvailable)));
+    _sellStep = mag / 10;
+    document.getElementById('sell-modal-symbol-name').textContent = symbol;
+    document.getElementById('sell-modal-symbol').textContent = symbol;
+    document.getElementById('sell-modal-available').textContent = _sellAvailable;
+    document.getElementById('sell-modal-price').textContent = 'R$ ' + priceDisplay;
+    document.getElementById('sell-modal-input-symbol').value = symbol;
+    document.getElementById('sell-modal-qty').value = _sellAvailable;
+    updateSellTotal();
+    document.getElementById('sell-modal').style.display = 'flex';
+    document.getElementById('sell-modal-qty').focus();
+  }
+
+  function closeSellModal() {
+    document.getElementById('sell-modal').style.display = 'none';
+  }
+
+  function sanitizeSellQty(input) {
+    var v = parseFloat(String(input.value).replace(',', '.'));
+    if (isNaN(v) || v <= 0) { input.value = _sellStep; return; }
+    if (v > _sellAvailable) { input.value = _sellAvailable; }
+  }
+
+  function updateSellTotal() {
+    var raw = String(document.getElementById('sell-modal-qty').value).replace(',', '.');
+    var qty = parseFloat(raw) || 0;
+    var totalCents = Math.round(_sellPriceCents * qty);
+    var reais = Math.floor(totalCents / 100);
+    var centavos = totalCents % 100;
+    var reaisStr = reais.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    document.getElementById('sell-modal-total').textContent = 'R$ ' + reaisStr + ',' + String(centavos).padStart(2, '0');
+  }
+
+  function setSellPct(pct) {
+    var v = Math.round(_sellAvailable * pct / 100 * 1e10) / 1e10;
+    if (v <= 0) v = _sellStep;
+    document.getElementById('sell-modal-qty').value = v;
+    updateSellTotal();
+  }
+
+  document.getElementById('sell-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeSellModal();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeSellModal();
+    }
+    var qty = document.getElementById('sell-modal-qty');
+    if (document.activeElement === qty) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        var v = parseFloat(String(qty.value).replace(',', '.')) || 0;
+        v = e.key === 'ArrowUp' ? v + _sellStep : v - _sellStep;
+        v = Math.round(v * 1e10) / 1e10;
+        if (v <= 0) v = _sellStep;
+        if (v > _sellAvailable) v = _sellAvailable;
+        qty.value = v;
+        updateSellTotal();
+      }
+    }
+  });
+</script>
+
+{% endblock %}

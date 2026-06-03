@@ -1,0 +1,177 @@
+#![forbid(unsafe_code)]
+
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use crate::domain::asset::AssetType;
+use crate::domain::user::UserId;
+use crate::errors::BusinessError;
+
+/// A position in a specific asset.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Position {
+    pub asset_type: AssetType,
+    /// Fractional quantity (e.g. 0.001 BTC).
+    pub quantity: f64,
+}
+
+/// A user's investment wallet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Wallet {
+    pub user_id: UserId,
+    /// Available balance in cents (BRL).
+    pub balance_cents: u64,
+    pub positions: HashMap<String, Position>,
+}
+
+impl Wallet {
+    pub fn new(user_id: UserId, initial_balance: u64) -> Self {
+        Self {
+            user_id,
+            balance_cents: initial_balance,
+            positions: HashMap::new(),
+        }
+    }
+
+    /// Executes a buy order for an asset, supporting fractional quantities.
+    ///
+    /// # Example
+    /// ```
+    /// use core_business::{Wallet, AssetType};
+    /// use core_business::domain::user::UserId;
+    ///
+    /// let id = UserId::new();
+    /// let mut wallet = Wallet::new(id, 100_000_000);
+    /// let result = wallet.buy(&AssetType::Bitcoin, 0.001, 35_000_000);
+    /// assert!(result.is_ok());
+    /// ```
+    pub fn buy(
+        &mut self,
+        asset_type: &AssetType,
+        quantity: f64,
+        unit_price_cents: u64,
+    ) -> Result<(), BusinessError> {
+        if quantity <= 0.0 || !quantity.is_finite() {
+            return Err(BusinessError::InvalidQuantity);
+        }
+
+        let total_cost = (unit_price_cents as f64 * quantity).round() as u64;
+
+        if self.balance_cents < total_cost {
+            return Err(BusinessError::InsufficientBalance);
+        }
+
+        self.balance_cents -= total_cost;
+
+        let position = self
+            .positions
+            .entry(asset_type.symbol().to_string())
+            .or_insert(Position { asset_type: asset_type.clone(), quantity: 0.0 });
+
+        position.quantity += quantity;
+        Ok(())
+    }
+
+    /// Executes a sell order for an asset, supporting fractional quantities.
+    pub fn sell(
+        &mut self,
+        asset_type: &AssetType,
+        quantity: f64,
+        unit_price_cents: u64,
+    ) -> Result<(), BusinessError> {
+        if quantity <= 0.0 || !quantity.is_finite() {
+            return Err(BusinessError::InvalidQuantity);
+        }
+
+        let position = self
+            .positions
+            .get_mut(asset_type.symbol())
+            .ok_or(BusinessError::InsufficientPosition)?;
+
+        if position.quantity < quantity {
+            return Err(BusinessError::InsufficientPosition);
+        }
+
+        let revenue = (unit_price_cents as f64 * quantity).round() as u64;
+
+        position.quantity -= quantity;
+        self.balance_cents += revenue;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use claim::{assert_ok, assert_err};
+
+    fn test_wallet() -> Wallet {
+        Wallet::new(UserId::new(), 100_000)
+    }
+
+    #[test]
+    fn valid_buy_debits_balance() {
+        let mut w = test_wallet();
+        assert_ok!(w.buy(&AssetType::Dollar, 10.0, 500));
+        assert_eq!(w.balance_cents, 95_000);
+    }
+
+    #[test]
+    fn fractional_buy_debits_correctly() {
+        // 0.001 BTC at 35_000_000 cents (R$350.000,00) = 35_000 cents (R$350,00)
+        let mut w = Wallet::new(UserId::new(), 100_000_000);
+        assert_ok!(w.buy(&AssetType::Bitcoin, 0.001, 35_000_000));
+        assert_eq!(w.balance_cents, 99_965_000);
+    }
+
+    #[test]
+    fn buy_with_insufficient_balance_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.buy(&AssetType::Bitcoin, 1.0, 200_000));
+    }
+
+    #[test]
+    fn buy_zero_quantity_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.buy(&AssetType::Solana, 0.0, 100));
+    }
+
+    #[test]
+    fn buy_negative_quantity_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.buy(&AssetType::Solana, -1.0, 100));
+    }
+
+    #[test]
+    fn valid_sell_credits_balance() {
+        let mut w = test_wallet();
+        assert_ok!(w.buy(&AssetType::Dollar, 10.0, 500));
+        assert_ok!(w.sell(&AssetType::Dollar, 5.0, 500));
+        assert_eq!(w.balance_cents, 97_500);
+    }
+
+    #[test]
+    fn sell_without_position_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.sell(&AssetType::Bitcoin, 1.0, 100));
+    }
+
+    #[test]
+    fn sell_above_position_returns_error() {
+        let mut w = test_wallet();
+        assert_ok!(w.buy(&AssetType::Dollar, 5.0, 100));
+        assert_err!(w.sell(&AssetType::Dollar, 10.0, 100));
+    }
+
+    #[test]
+    fn buy_nan_quantity_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.buy(&AssetType::Dollar, f64::NAN, 100));
+    }
+
+    #[test]
+    fn buy_infinite_quantity_returns_error() {
+        let mut w = test_wallet();
+        assert_err!(w.buy(&AssetType::Dollar, f64::INFINITY, 100));
+    }
+}
