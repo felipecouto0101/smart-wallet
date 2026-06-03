@@ -61,7 +61,8 @@
           type="number"
           id="modal-qty"
           name="quantity"
-          step="any"
+          step="0.001"
+          min="0.001"
           value="1"
           required
           oninput="sanitizeQty(this); updateTotal()"

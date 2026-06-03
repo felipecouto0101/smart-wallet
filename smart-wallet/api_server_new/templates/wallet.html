@@ -68,7 +68,7 @@
       </div>
       <div class="form-group">
         <label>Quantity</label>
-        <input type="number" name="quantity" step="any" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
+        <input type="number" name="quantity" step="0.001" min="0.001" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
       </div>
       <button type="submit">Buy</button>
     </form>
@@ -89,7 +89,7 @@
       </div>
       <div class="form-group">
         <label>Quantity</label>
-        <input type="number" name="quantity" step="any" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
+        <input type="number" name="quantity" step="0.001" min="0.001" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
       </div>
       <button type="submit" class="btn-danger">Sell</button>
     </form>
