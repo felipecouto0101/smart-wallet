@@ -192,6 +192,7 @@ pub async fn get_assets(State(state): State<Arc<AppState>>) -> Response {
 pub async fn get_wallet(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
     let Some(id) = get_user_id(&headers, &state.jwt_secret) else {
         return Redirect::to("/login").into_response();
@@ -227,8 +228,8 @@ pub async fn get_wallet(
             unit_price_display: cents_to_display(o.price_cents),
             total_display: total_to_display(o.price_cents, o.quantity),
         }).collect(),
-        message: None,
-        error: None,
+        message: params.get("msg").cloned(),
+        error: params.get("err").map(|e| e.replace('+', " ")),
     }.into_response()
 }
 
@@ -280,7 +281,10 @@ pub async fn post_buy(
             let _ = state.wallet_repo.record_order(&order).await;
             Redirect::to("/wallet?msg=purchase+successful").into_response()
         }
-        Err(e) => wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => {
+            let msg = e.to_string().replace(' ', "+");
+            Redirect::to(&format!("/wallet?err={}", msg)).into_response()
+        }
     }
 }
 
@@ -317,7 +321,10 @@ pub async fn post_sell(
             let _ = state.wallet_repo.record_order(&order).await;
             Redirect::to("/wallet?msg=sale+successful").into_response()
         }
-        Err(e) => wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => {
+            let msg = e.to_string().replace(' ', "+");
+            Redirect::to(&format!("/wallet?err={}", msg)).into_response()
+        }
     }
 }
 

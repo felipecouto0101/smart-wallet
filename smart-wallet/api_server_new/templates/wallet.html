@@ -4,11 +4,27 @@
 
 {% block content %}
 
+<!-- Success Modal -->
 {% if let Some(msg) = message %}
-  <div class="alert alert-success">{{ msg }}</div>
+<div id="success-modal"
+  style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #5ce07c;border-radius:12px;padding:2rem;width:100%;max-width:360px;margin:1rem;text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:1rem;">✅</div>
+    <h3 style="color:#4ade80;margin-bottom:0.5rem;text-transform:capitalize;">{{ msg }}</h3>
+    <button class="btn" style="margin-top:1.5rem;width:100%;" onclick="document.getElementById('success-modal').style.display='none'">OK</button>
+  </div>
+</div>
 {% endif %}
+
 {% if let Some(err) = error %}
-  <div class="alert alert-error">{{ err }}</div>
+<div id="error-modal"
+  style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #e05c6c;border-radius:12px;padding:2rem;width:100%;max-width:360px;margin:1rem;text-align:center;">
+    <div style="font-size:2.5rem;margin-bottom:1rem;">❌</div>
+    <h3 style="color:#f87171;margin-bottom:0.5rem;">{{ err }}</h3>
+    <button class="btn btn-danger" style="margin-top:1.5rem;width:100%;" onclick="document.getElementById('error-modal').style.display='none'">OK</button>
+  </div>
+</div>
 {% endif %}
 
 <div class="card">
@@ -230,6 +246,11 @@
   document.getElementById('sell-modal').addEventListener('click', function(e) {
     if (e.target === this) closeSellModal();
   });
+
+  // limpa ?msg da URL para não reaparecer no refresh
+  if (window.location.search) {
+    history.replaceState(null, '', window.location.pathname);
+  }
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
