@@ -3,3 +3,4 @@ SDLC.md
 target/
 .env
 vscode/
+env

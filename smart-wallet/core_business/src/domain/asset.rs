@@ -16,7 +16,6 @@ pub enum AssetType {
     Ethereum,
     Solana,
     Dollar,
-    Real,
 }
 
 impl AssetType {
@@ -27,7 +26,6 @@ impl AssetType {
             AssetType::Ethereum => "ETH",
             AssetType::Solana   => "SOL",
             AssetType::Dollar   => "USD",
-            AssetType::Real     => "BRL",
         }
     }
 
@@ -38,7 +36,6 @@ impl AssetType {
             AssetType::Ethereum => "Ethereum",
             AssetType::Solana   => "Solana",
             AssetType::Dollar   => "US Dollar",
-            AssetType::Real     => "Brazilian Real",
         }
     }
 }
@@ -80,11 +77,6 @@ mod tests {
     #[test]
     fn dollar_symbol_is_usd() {
         assert_eq!(AssetType::Dollar.symbol(), "USD");
-    }
-
-    #[test]
-    fn real_symbol_is_brl() {
-        assert_eq!(AssetType::Real.symbol(), "BRL");
     }
 
     #[test]

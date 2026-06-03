@@ -33,3 +33,11 @@ pub trait AssetRepository: Send + Sync {
     async fn list_all(&self) -> Result<Vec<Asset>, BusinessError>;
     async fn find_price(&self, symbol: &str) -> Result<Asset, BusinessError>;
 }
+
+/// Contract for fetching live prices from an external source.
+#[async_trait]
+#[cfg_attr(test, mockall::automock)]
+pub trait PriceProvider: Send + Sync {
+    /// Returns all asset prices in cents (BRL).
+    async fn fetch_prices(&self) -> Result<Vec<Asset>, BusinessError>;
+}

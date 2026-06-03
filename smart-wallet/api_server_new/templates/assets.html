@@ -21,7 +21,7 @@
           <span style="color:#94a3b8;margin-left:0.5rem;font-size:0.85rem;">{{ asset.name }}</span>
         </td>
         <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">
-          R$ {{ asset.price_display }}
+          <span id="price-{{ asset.symbol }}">R$ {{ asset.price_display }}</span>
         </td>
         <td style="padding:0.85rem;text-align:center;">
           <button
@@ -131,5 +131,33 @@
       }
     }
   });
+
+  // ── Live price polling ────────────────────────────────────────────────────
+  var _assetTypeToSymbol = {
+    'Bitcoin': 'BTC', 'Ethereum': 'ETH', 'Solana': 'SOL', 'Dollar': 'USD'
+  };
+
+  function centsToDisplay(cents) {
+    var reais = Math.floor(cents / 100);
+    var centavos = cents % 100;
+    var reaisStr = reais.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return reaisStr + ',' + String(centavos).padStart(2, '0');
+  }
+
+  function pollPrices() {
+    fetch('/api/assets')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        data.assets.forEach(function(asset) {
+          var symbol = _assetTypeToSymbol[asset.asset_type];
+          if (!symbol) return;
+          var el = document.getElementById('price-' + symbol);
+          if (el) el.textContent = 'R$ ' + centsToDisplay(asset.price_cents);
+        });
+      })
+      .catch(function() {}); // silently ignore network errors
+  }
+
+  setInterval(pollPrices, 2000);
 </script>
 {% endblock %}

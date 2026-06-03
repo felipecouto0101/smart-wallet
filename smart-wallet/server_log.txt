@@ -1,0 +1,10 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+    Blocking waiting for file lock on package cache
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `target\debug\api_server.exe`
+2026-06-03T17:47:50.895695Z  INFO sqlx::postgres::notice: relação "_sqlx_migrations" já existe, ignorando
+2026-06-03T17:47:51.342145Z  INFO infra_data::price_provider: live prices updated (cents BRL) btc=33591644 eth=931824 sol=37367 usd=508
+2026-06-03T17:47:51.342258Z  INFO infra_data::repositories::asset: asset prices refreshed from live feed
+2026-06-03T17:47:51.343757Z  INFO api_server: 🚀 smart-wallet running at http://localhost:8090
+error: process didn't exit successfully: `target\debug\api_server.exe` (exit code: 1)

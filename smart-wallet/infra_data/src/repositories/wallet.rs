@@ -180,7 +180,6 @@ fn symbol_to_asset_type(symbol: &str) -> Result<AssetType, BusinessError> {
         "ETH" => Ok(AssetType::Ethereum),
         "SOL" => Ok(AssetType::Solana),
         "USD" => Ok(AssetType::Dollar),
-        "BRL" => Ok(AssetType::Real),
         other => Err(BusinessError::AssetNotFound(other.to_string())),
     }
 }

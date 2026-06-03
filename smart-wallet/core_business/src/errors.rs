@@ -28,4 +28,7 @@ pub enum BusinessError {
 
     #[error("Invalid or expired token")]
     InvalidToken,
+
+    #[error("Failed to fetch live prices: {0}")]
+    PriceFetchError(String),
 }

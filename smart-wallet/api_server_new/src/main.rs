@@ -7,9 +7,17 @@ mod state;
 use color_eyre::Result;
 use tracing_subscriber::{EnvFilter, fmt};
 use std::sync::Arc;
+use tokio::time::{interval, Duration};
 
-use infra_data::{connect, repositories::{UserRepositoryPg, WalletRepositoryPg, AssetRepositoryPg}};
+use infra_data::{
+    connect,
+    repositories::{UserRepositoryPg, WalletRepositoryPg, AssetRepositoryPg},
+    LivePriceProvider,
+    update_prices,
+};
 use state::AppState;
+
+const PRICE_REFRESH_SECS: u64 = 2;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,10 +37,29 @@ async fn main() -> Result<()> {
 
     let pool = connect(&database_url).await?;
 
+    let asset_repo = AssetRepositoryPg::new();
+    let price_cache = asset_repo.cache_handle();
+
+    // Fetch live prices once before starting the server
+    let provider = LivePriceProvider::new();
+    update_prices(&price_cache, &provider).await;
+
+    // Background task: refresh prices every PRICE_REFRESH_SECS seconds
+    let bg_cache = Arc::clone(&price_cache);
+    tokio::spawn(async move {
+        let provider = LivePriceProvider::new();
+        let mut ticker = interval(Duration::from_secs(PRICE_REFRESH_SECS));
+        ticker.tick().await; // skip the immediate first tick (already fetched above)
+        loop {
+            ticker.tick().await;
+            update_prices(&bg_cache, &provider).await;
+        }
+    });
+
     let state = Arc::new(AppState {
         user_repo:   Arc::new(UserRepositoryPg::new(pool.clone())),
         wallet_repo: Arc::new(WalletRepositoryPg::new(pool.clone())),
-        asset_repo:  Arc::new(AssetRepositoryPg::new()),
+        asset_repo:  Arc::new(asset_repo),
         jwt_secret,
     });
 

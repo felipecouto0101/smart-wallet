@@ -9,4 +9,4 @@ pub use domain::wallet::{Wallet, Position};
 pub use domain::user::{UserId, User};
 pub use domain::order::{Order, OrderType};
 pub use errors::BusinessError;
-pub use ports::{UserRepository, WalletRepository, AssetRepository};
+pub use ports::{UserRepository, WalletRepository, AssetRepository, PriceProvider};

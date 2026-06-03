@@ -8,8 +8,9 @@ import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
 // ── Custom metrics ────────────────────────────────────────────────────────────
-const buyErrorRate  = new Rate('buy_errors');
-const buyDuration   = new Trend('buy_duration_ms', true);
+const buyErrorRate   = new Rate('buy_errors');
+const buyDuration    = new Trend('buy_duration_ms', true);
+const assetsDuration = new Trend('assets_duration_ms', true);
 
 // ── Stages: ramp up → sustain → ramp down ────────────────────────────────────
 export const options = {
@@ -20,10 +21,11 @@ export const options = {
     { duration: '15s', target: 0   }, // ramp down
   ],
   thresholds: {
-    http_req_duration:    ['p(95)<500', 'p(99)<1000'], // 95th < 500ms, 99th < 1s
-    http_req_failed:      ['rate<0.01'],                // <1% overall failures
-    buy_errors:           ['rate<0.02'],                // <2% buy failures
+    http_req_duration:    ['p(95)<500', 'p(99)<1000'],
+    http_req_failed:      ['rate<0.01'],
+    buy_errors:           ['rate<0.02'],
     buy_duration_ms:      ['p(99)<800'],
+    assets_duration_ms:   ['p(99)<100'],  // cache hit — must be fast
   },
 };
 
@@ -61,11 +63,13 @@ export default function () {
 
   sleep(0.3);
 
-  // 3. List assets (GET — no auth required)
-  const assetsRes = http.get(`${BASE}/api/assets`);
+  // 3. List assets — served from in-memory cache (no external call)
+  const assetsStart = Date.now();
+  const assetsRes   = http.get(`${BASE}/api/assets`);
+  assetsDuration.add(Date.now() - assetsStart);
   check(assetsRes, {
-    'assets: 200':          (r) => r.status === 200,
-    'assets: has Bitcoin':  (r) => r.json('assets.0.asset_type') === 'Bitcoin',
+    'assets: 200':         (r) => r.status === 200,
+    'assets: has Bitcoin': (r) => r.json('assets.0.asset_type') === 'Bitcoin',
   });
 
   sleep(0.2);

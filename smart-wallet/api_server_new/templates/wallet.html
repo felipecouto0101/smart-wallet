@@ -52,8 +52,8 @@
       <tr style="border-bottom:1px solid #1e2133;">
         <td style="padding:0.85rem;font-weight:600;">{{ pos.symbol }}</td>
         <td style="padding:0.85rem;text-align:right;font-family:monospace;">{{ pos.quantity }}</td>
-        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">R$ {{ pos.price_display }}</td>
-        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ {{ pos.total_display }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">R$ <span id="pos-price-{{ pos.symbol }}">{{ pos.price_display }}</span></td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ <span id="pos-total-{{ pos.symbol }}" data-qty="{{ pos.quantity }}">{{ pos.total_display }}</span></td>
         <td style="padding:0.85rem;text-align:center;">
           <button
             class="btn btn-danger"
@@ -79,7 +79,6 @@
           <option value="ETH">ETH — Ethereum</option>
           <option value="SOL">SOL — Solana</option>
           <option value="USD">USD — Dollar</option>
-          <option value="BRL">BRL — Real</option>
         </select>
       </div>
       <div class="form-group">
@@ -100,7 +99,6 @@
           <option value="ETH">ETH — Ethereum</option>
           <option value="SOL">SOL — Solana</option>
           <option value="USD">USD — Dollar</option>
-          <option value="BRL">BRL — Real</option>
         </select>
       </div>
       <div class="form-group">
@@ -251,6 +249,45 @@
   if (window.location.search) {
     history.replaceState(null, '', window.location.pathname);
   }
+
+  // ── Live price polling ────────────────────────────────────────────────────
+  var _livePrices = {}; // symbol -> price_cents
+  var _assetTypeToSymbol = {
+    'Bitcoin': 'BTC', 'Ethereum': 'ETH', 'Solana': 'SOL', 'Dollar': 'USD'
+  };
+
+  function centsToDisplay(cents) {
+    var reais = Math.floor(cents / 100);
+    var centavos = cents % 100;
+    var reaisStr = reais.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return reaisStr + ',' + String(centavos).padStart(2, '0');
+  }
+
+  function pollPrices() {
+    fetch('/api/assets')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        data.assets.forEach(function(asset) {
+          var symbol = _assetTypeToSymbol[asset.asset_type];
+          if (!symbol) return;
+          _livePrices[symbol] = asset.price_cents;
+
+          // update position price
+          var priceEl = document.getElementById('pos-price-' + symbol);
+          if (priceEl) priceEl.textContent = centsToDisplay(asset.price_cents);
+
+          // update position total using current quantity from data attribute
+          var totalEl = document.getElementById('pos-total-' + symbol);
+          if (totalEl) {
+            var qty = parseFloat(totalEl.getAttribute('data-qty') || '0');
+            totalEl.textContent = centsToDisplay(Math.round(asset.price_cents * qty));
+          }
+        });
+      })
+      .catch(function() {});
+  }
+
+  setInterval(pollPrices, 2000);
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {

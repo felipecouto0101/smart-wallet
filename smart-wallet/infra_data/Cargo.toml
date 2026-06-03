@@ -7,6 +7,7 @@ edition = "2021"
 core_business = { path = "../core_business" }
 sqlx          = { workspace = true }
 tokio         = { workspace = true }
+reqwest       = { workspace = true }
 serde         = { workspace = true }
 serde_json    = { workspace = true }
 uuid          = { workspace = true }
@@ -16,3 +17,8 @@ async-trait   = { workspace = true }
 bcrypt        = { workspace = true }
 tracing       = { workspace = true }
 thiserror     = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+claim             = { workspace = true }
+mockall           = { workspace = true }
