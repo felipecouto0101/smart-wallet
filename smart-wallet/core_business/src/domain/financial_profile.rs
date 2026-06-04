@@ -329,6 +329,7 @@ pub fn fmt_brl(cents: u64) -> String {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
 
     fn profile() -> FinancialProfile {
         FinancialProfile {
@@ -412,5 +413,80 @@ mod tests {
         // invested (10_000) < goal (30_000) -> yellow
         let alerts = proactive_alerts(&profile(), 10_000);
         assert!(alerts.iter().any(|a| a.level == AlertLevel::Yellow));
+    }
+
+    // ── Property-based tests ─────────────────────────────────────────────────
+
+    proptest! {
+        /// Green analysis must always have non-negative after_purchase balance.
+        #[test]
+        fn prop_green_result_is_never_negative(
+            income in 100_000u64..10_000_000u64,
+            obligations in 0u64..50_000u64,
+        ) {
+            let p = FinancialProfile {
+                monthly_income_cents: income,
+                card_bill_cents: obligations,
+                card_bill_days: 15,
+                pending_bills_cents: 0,
+                estimated_variable_spend_cents: 0,
+                monthly_savings_goal_cents: 0,
+                days_until_salary: 10,
+            };
+            let free = p.true_free_balance(0);
+            // purchase fits exactly
+            if free >= 0 {
+                let result = analyze_purchase(&p, 0, free.unsigned_abs());
+                prop_assert_eq!(result.level, AlertLevel::Green);
+                prop_assert!(result.free_balance_after_purchase_cents >= 0);
+            }
+        }
+
+        /// true_free_balance must equal income minus the sum of all obligations.
+        #[test]
+        fn prop_true_free_balance_arithmetic(
+            income in 0u64..50_000_000u64,
+            card   in 0u64..10_000_000u64,
+            bills  in 0u64..10_000_000u64,
+            var_sp in 0u64..10_000_000u64,
+            goal   in 0u64..10_000_000u64,
+        ) {
+            let p = FinancialProfile {
+                monthly_income_cents: income,
+                card_bill_cents: card,
+                card_bill_days: 5,
+                pending_bills_cents: bills,
+                estimated_variable_spend_cents: var_sp,
+                monthly_savings_goal_cents: goal,
+                days_until_salary: 10,
+            };
+            let expected = income as i64 - card as i64 - bills as i64 - var_sp as i64 - goal as i64;
+            prop_assert_eq!(p.true_free_balance(0), expected);
+        }
+
+        /// fmt_brl must never panic and must always contain a comma separator.
+        #[test]
+        fn prop_fmt_brl_never_panics_and_contains_comma(cents in 0u64..1_000_000_000u64) {
+            let result = fmt_brl(cents);
+            prop_assert!(result.contains(','));
+        }
+
+        /// A zero-value purchase never flips a positive free balance to negative.
+        #[test]
+        fn prop_zero_purchase_does_not_change_free_balance(
+            income in 50_000u64..5_000_000u64,
+        ) {
+            let p = FinancialProfile {
+                monthly_income_cents: income,
+                card_bill_cents: 0,
+                card_bill_days: 20,
+                pending_bills_cents: 0,
+                estimated_variable_spend_cents: 0,
+                monthly_savings_goal_cents: 0,
+                days_until_salary: 10,
+            };
+            let result = analyze_purchase(&p, 0, 0);
+            prop_assert_eq!(result.free_balance_after_purchase_cents, p.true_free_balance(0));
+        }
     }
 }

@@ -110,6 +110,7 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use claim::{assert_ok, assert_err};
+    use proptest::prelude::*;
 
     fn test_wallet() -> Wallet {
         Wallet::new(UserId::new(), 100_000)
@@ -179,5 +180,60 @@ mod tests {
     fn buy_infinite_quantity_returns_error() {
         let mut w = test_wallet();
         assert_err!(w.buy(&AssetType::Dollar, f64::INFINITY, 100));
+    }
+
+    // ── Property-based tests ─────────────────────────────────────────────────
+
+    proptest! {
+        /// Balance after a successful buy must always decrease by exactly cost.
+        #[test]
+        fn prop_buy_decreases_balance_by_exact_cost(
+            initial in 10_000_000u64..1_000_000_000u64,
+            qty     in 1u32..1_000u32,
+            price   in 1u64..100_000u64,
+        ) {
+            let qty_f = qty as f64;
+            let cost  = (price as f64 * qty_f).round() as u64;
+            if cost <= initial {
+                let mut w = Wallet::new(UserId::new(), initial);
+                assert_ok!(w.buy(&AssetType::Dollar, qty_f, price));
+                prop_assert_eq!(w.balance_cents, initial - cost);
+            }
+        }
+
+        /// Buy followed by full sell must restore balance to original value.
+        #[test]
+        fn prop_buy_then_sell_same_price_restores_balance(
+            initial in 10_000_000u64..1_000_000_000u64,
+            qty     in 1u32..1_000u32,
+            price   in 1u64..100_000u64,
+        ) {
+            let qty_f = qty as f64;
+            let cost  = (price as f64 * qty_f).round() as u64;
+            if cost <= initial {
+                let mut w = Wallet::new(UserId::new(), initial);
+                assert_ok!(w.buy(&AssetType::Dollar, qty_f, price));
+                assert_ok!(w.sell(&AssetType::Dollar, qty_f, price));
+                prop_assert_eq!(w.balance_cents, initial);
+            }
+        }
+
+        /// Selling more than owned must always fail.
+        #[test]
+        fn prop_sell_excess_always_fails(
+            initial in 10_000_000u64..1_000_000_000u64,
+            qty     in 1u32..500u32,
+            price   in 1u64..100_000u64,
+        ) {
+            let qty_f  = qty as f64;
+            let cost   = (price as f64 * qty_f).round() as u64;
+            if cost <= initial {
+                let mut w = Wallet::new(UserId::new(), initial);
+                assert_ok!(w.buy(&AssetType::Dollar, qty_f, price));
+                // try to sell double
+                let result = w.sell(&AssetType::Dollar, qty_f * 2.0, price);
+                prop_assert!(result.is_err());
+            }
+        }
     }
 }
