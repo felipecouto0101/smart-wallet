@@ -12,6 +12,8 @@ pub struct Position {
     pub asset_type: AssetType,
     /// Fractional quantity (e.g. 0.001 BTC).
     pub quantity: f64,
+    /// Average purchase cost in cents (BRL) per unit.
+    pub avg_cost_cents: f64,
 }
 
 /// A user's investment wallet.
@@ -65,9 +67,13 @@ impl Wallet {
         let position = self
             .positions
             .entry(asset_type.symbol().to_string())
-            .or_insert(Position { asset_type: asset_type.clone(), quantity: 0.0 });
+            .or_insert(Position { asset_type: asset_type.clone(), quantity: 0.0, avg_cost_cents: 0.0 });
 
-        position.quantity += quantity;
+        // weighted average cost: (old_qty * old_avg + new_qty * price) / total_qty
+        let new_qty = position.quantity + quantity;
+        position.avg_cost_cents = (position.quantity * position.avg_cost_cents
+            + quantity * unit_price_cents as f64) / new_qty;
+        position.quantity = new_qty;
         Ok(())
     }
 

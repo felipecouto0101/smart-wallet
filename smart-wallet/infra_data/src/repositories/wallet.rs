@@ -32,6 +32,7 @@ struct WalletRow {
 struct PositionRow {
     symbol: String,
     quantity: f64,
+    avg_cost_cents: f64,
 }
 
 #[async_trait]
@@ -47,7 +48,7 @@ impl WalletRepository for WalletRepositoryPg {
         .map_err(|_| BusinessError::UserNotFound)?;
 
         let position_rows: Vec<PositionRow> = sqlx::query_as(
-            "SELECT symbol, quantity FROM positions WHERE user_id = $1",
+            "SELECT symbol, quantity, avg_cost_cents FROM positions WHERE user_id = $1",
         )
         .bind(user_id.0)
         .fetch_all(&self.pool)
@@ -57,7 +58,11 @@ impl WalletRepository for WalletRepositoryPg {
         let mut positions = HashMap::new();
         for p in position_rows {
             let asset_type = symbol_to_asset_type(&p.symbol)?;
-            positions.insert(p.symbol.clone(), Position { asset_type, quantity: p.quantity });
+            positions.insert(p.symbol.clone(), Position {
+                asset_type,
+                quantity: p.quantity,
+                avg_cost_cents: p.avg_cost_cents,
+            });
         }
 
         Ok(Wallet {
@@ -91,15 +96,16 @@ impl WalletRepository for WalletRepositoryPg {
             } else {
                 sqlx::query(
                     r#"
-                    INSERT INTO positions (user_id, symbol, quantity)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO positions (user_id, symbol, quantity, avg_cost_cents)
+                    VALUES ($1, $2, $3, $4)
                     ON CONFLICT (user_id, symbol)
-                    DO UPDATE SET quantity = EXCLUDED.quantity
+                    DO UPDATE SET quantity = EXCLUDED.quantity, avg_cost_cents = EXCLUDED.avg_cost_cents
                     "#,
                 )
                 .bind(wallet.user_id.0)
                 .bind(symbol)
                 .bind(position.quantity)
+                .bind(position.avg_cost_cents)
                 .execute(&self.pool)
                 .await
                 .map_err(|_| BusinessError::UserNotFound)?;

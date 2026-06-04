@@ -50,6 +50,10 @@ pub struct PositionView {
     pub price_cents: u64,
     pub price_display: String,
     pub total_display: String,
+    pub avg_cost_display: String,
+    pub pnl_display: String,
+    pub pnl_pct: String,
+    pub pnl_positive: bool,
 }
 
 pub struct OrderView {
@@ -89,6 +93,21 @@ fn cents_to_display(cents: u64) -> String {
 fn total_to_display(unit_price_cents: u64, quantity: f64) -> String {
     let total_cents = (unit_price_cents as f64 * quantity).round() as u64;
     cents_to_display(total_cents)
+}
+
+fn pnl(current_price_cents: u64, avg_cost_cents: f64, quantity: f64) -> (String, String, bool) {
+    let current_total = current_price_cents as f64 * quantity;
+    let cost_total = avg_cost_cents * quantity;
+    let diff = current_total - cost_total;
+    let pct = if cost_total > 0.0 { diff / cost_total * 100.0 } else { 0.0 };
+    let positive = diff >= 0.0;
+    let abs_diff = diff.abs().round() as u64;
+    let sign = if positive { "+" } else { "-" };
+    (
+        format!("{}{}", sign, cents_to_display(abs_diff)),
+        format!("{}{:.2}%", sign, pct.abs()),
+        positive,
+    )
 }
 
 fn get_user_id(headers: &HeaderMap, secret: &str) -> Option<core_business::UserId> {
@@ -213,12 +232,17 @@ pub async fn get_wallet(
                 .find(|a| a.asset_type == p.asset_type)
                 .map(|a| a.price_cents)
                 .unwrap_or(0);
+            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
             PositionView {
                 symbol: p.asset_type.symbol().to_string(),
                 quantity: p.quantity,
                 price_cents,
                 price_display: cents_to_display(price_cents),
                 total_display: total_to_display(price_cents, p.quantity),
+                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
+                pnl_display,
+                pnl_pct,
+                pnl_positive,
             }
         }).collect(),
         orders: orders.iter().map(|o| OrderView {
@@ -354,12 +378,17 @@ async fn wallet_page_with_error(
                 .find(|a| a.asset_type == p.asset_type)
                 .map(|a| a.price_cents)
                 .unwrap_or(0);
+            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
             PositionView {
                 symbol: p.asset_type.symbol().to_string(),
                 quantity: p.quantity,
                 price_cents,
                 price_display: cents_to_display(price_cents),
                 total_display: total_to_display(price_cents, p.quantity),
+                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
+                pnl_display,
+                pnl_pct,
+                pnl_positive,
             }
         }).collect()).unwrap_or_default(),
         orders: orders.iter().map(|o| OrderView {
