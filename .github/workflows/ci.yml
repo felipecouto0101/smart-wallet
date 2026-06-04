@@ -1,0 +1,92 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── NÍVEL 1: Análise Estática (SAST) & Qualidade ──────────────────────────
+  sast:
+    name: "NÍVEL 1 — SAST & Qualidade"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smart-wallet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            smart-wallet/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('smart-wallet/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy -D warnings
+        run: cargo clippy --workspace --all-targets --features api_server/test-helpers -- -D warnings
+
+  # ── NÍVEL 2: Auditoria de Dependências (SCA) ─────────────────────────────
+  sca:
+    name: "NÍVEL 2 — SCA (cargo audit)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smart-wallet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit
+        run: cargo audit
+
+  # ── NÍVEL 3: Testes (Unitários + Property-Based + Integração E2E) ─────────
+  test:
+    name: "NÍVEL 3 — Testes"
+    runs-on: ubuntu-latest
+    needs: [sast, sca]
+    defaults:
+      run:
+        working-directory: smart-wallet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            smart-wallet/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('smart-wallet/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: cargo test (unitários + property-based + integração E2E + doc-tests)
+        run: cargo test --workspace --features api_server/test-helpers
