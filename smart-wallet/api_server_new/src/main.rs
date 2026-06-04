@@ -1,9 +1,5 @@
 #![forbid(unsafe_code)]
 
-mod auth;
-mod routes;
-mod state;
-
 use color_eyre::Result;
 use tracing_subscriber::{EnvFilter, fmt};
 use std::sync::Arc;
@@ -15,7 +11,8 @@ use infra_data::{
     LivePriceProvider,
     update_prices,
 };
-use state::AppState;
+use api_server::state::AppState;
+use api_server::routes::create_router;
 
 const PRICE_REFRESH_SECS: u64 = 2;
 
@@ -64,7 +61,7 @@ async fn main() -> Result<()> {
         jwt_secret,
     });
 
-    let app = routes::create_router(state);
+    let app = create_router(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8090").await?;
     tracing::info!("🚀 smart-wallet running at http://localhost:8090");

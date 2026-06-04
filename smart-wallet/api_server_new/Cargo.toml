@@ -3,13 +3,21 @@ name = "api_server"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+test-helpers = ["core_business/test-helpers", "mockall"]
+
 [[bin]]
 name = "api_server"
 path = "src/main.rs"
 
+[lib]
+name = "api_server"
+path = "src/lib.rs"
+
 [dependencies]
 core_business = { path = "../core_business" }
 infra_data    = { path = "../infra_data" }
+mockall       = { workspace = true, optional = true }
 
 axum               = { workspace = true }
 askama             = { workspace = true }
@@ -37,5 +45,7 @@ time               = { version = "0.3", default-features = false }
 pretty_assertions = { workspace = true }
 claim             = { workspace = true }
 mockall           = { workspace = true }
-reqwest           = { version = "0.12", default-features = false, features = ["json", "cookies"] }
+proptest          = { workspace = true }
 tokio             = { workspace = true }
+tower             = { version = "0.4", default-features = false, features = ["util"] }
+secrecy           = { workspace = true }
