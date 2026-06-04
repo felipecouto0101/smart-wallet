@@ -3,16 +3,21 @@ name = "core_business"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+test-helpers = ["mockall"]
+
 [dependencies]
 serde       = { workspace = true }
 uuid        = { workspace = true }
 chrono      = { workspace = true }
 secrecy     = { workspace = true }
 validator   = { workspace = true }
-mockall     = { workspace = true }
+mockall     = { workspace = true, optional = true }
 thiserror   = { workspace = true }
 async-trait = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 claim             = { workspace = true }
+proptest          = { workspace = true }
+mockall           = { workspace = true }

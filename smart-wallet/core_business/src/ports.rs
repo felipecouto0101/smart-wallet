@@ -5,11 +5,12 @@ use crate::domain::user::{UserId, User, CreateUserDto};
 use crate::domain::wallet::Wallet;
 use crate::domain::asset::Asset;
 use crate::domain::order::Order;
+use crate::domain::financial_profile::FinancialProfile;
 use crate::errors::BusinessError;
 
 /// Persistence contract for users.
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
+#[cfg_attr(any(test, feature = "test-helpers"), mockall::automock)]
 pub trait UserRepository: Send + Sync {
     async fn create(&self, dto: CreateUserDto) -> Result<User, BusinessError>;
     async fn find_by_email(&self, email: &str) -> Result<User, BusinessError>;
@@ -18,7 +19,7 @@ pub trait UserRepository: Send + Sync {
 
 /// Persistence contract for wallets.
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
+#[cfg_attr(any(test, feature = "test-helpers"), mockall::automock)]
 pub trait WalletRepository: Send + Sync {
     async fn find(&self, user_id: &UserId) -> Result<Wallet, BusinessError>;
     async fn save(&self, wallet: &Wallet) -> Result<(), BusinessError>;
@@ -28,7 +29,7 @@ pub trait WalletRepository: Send + Sync {
 
 /// Contract for asset price queries.
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
+#[cfg_attr(any(test, feature = "test-helpers"), mockall::automock)]
 pub trait AssetRepository: Send + Sync {
     async fn list_all(&self) -> Result<Vec<Asset>, BusinessError>;
     async fn find_price(&self, symbol: &str) -> Result<Asset, BusinessError>;
@@ -36,8 +37,17 @@ pub trait AssetRepository: Send + Sync {
 
 /// Contract for fetching live prices from an external source.
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
+#[cfg_attr(any(test, feature = "test-helpers"), mockall::automock)]
 pub trait PriceProvider: Send + Sync {
     /// Returns all asset prices in cents (BRL).
     async fn fetch_prices(&self) -> Result<Vec<Asset>, BusinessError>;
+}
+
+/// Persistence contract for financial profiles (Open Finance simulation).
+#[async_trait]
+#[cfg_attr(any(test, feature = "test-helpers"), mockall::automock)]
+pub trait FinancialProfileRepository: Send + Sync {
+    async fn get_or_generate(&self, user_id: &UserId) -> Result<FinancialProfile, BusinessError>;
+    async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError>;
+    async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError>;
 }
