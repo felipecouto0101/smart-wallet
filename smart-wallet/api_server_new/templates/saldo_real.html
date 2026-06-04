@@ -1,10 +1,9 @@
 {% extends "base.html" %}
-{% block title %} — Saldo Real{% endblock %}
+{% block title %} — Analyze Purchase{% endblock %}
 
 {% block content %}
 
-<!-- ── Alertas proativos (apenas no modo real, sem simulação) ─────────────── -->
-{% if sim_profile.is_none() %}
+<!-- Proactive alerts -->
 {% for alert in proactive_alerts %}
 <div style="padding:0.8rem 1rem;border-radius:8px;margin-bottom:0.6rem;font-size:0.88rem;
   {% if alert.is_green %}background:#1b2d1e;border:1px solid #4ade80;color:#4ade80;
@@ -12,95 +11,17 @@
   {% else %}background:#2d1b1e;border:1px solid #e05c6c;color:#f87171;{% endif %}
 ">{{ alert.message }}</div>
 {% endfor %}
-{% endif %}
 
-<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<!-- Header -->
 <div style="text-align:center;margin-bottom:1.5rem;">
-  <p style="font-size:2rem;margin-bottom:0.25rem;">🏦</p>
-  <h1 style="font-size:1.5rem;font-weight:800;color:#7c83ff;margin-bottom:0.25rem;">Saldo Real</h1>
-  <p style="color:#64748b;font-size:0.82rem;">Simule uma decisão de compra com base no seu perfil financeiro real</p>
+  <h1 style="font-size:1.5rem;font-weight:800;color:#7c83ff;margin-bottom:0.25rem;">Analyze Purchase</h1>
 </div>
 
-<!-- ── Seleção de perfil ─────────────────────────────────────────────────── -->
+<!-- Formulário -->
 <div class="card" style="padding:1.5rem;">
-  <p style="color:#94a3b8;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1rem;">
-    Escolha um perfil para simular
-  </p>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:1rem;">
-
-    <a href="/saldo-real?profile=student{% if let Some(v) = purchase_amount %}&amount={{ v }}{% endif %}"
-       style="text-decoration:none;">
-      <div style="
-        padding:1rem;border-radius:10px;text-align:center;cursor:pointer;
-        border:2px solid {% if is_student %}#7c83ff{% else %}#2d3148{% endif %};
-        background:{% if is_student %}#1e2040{% else %}#0f1117{% endif %};
-        transition:border-color 0.2s;
-      ">
-        <div style="font-size:1.5rem;margin-bottom:0.35rem;">🎓</div>
-        <div style="font-size:0.88rem;font-weight:700;color:#e2e8f0;">Estudante</div>
-        <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem;">até R$ 1.800/mês</div>
-      </div>
-    </a>
-
-    <a href="/saldo-real?profile=young{% if let Some(v) = purchase_amount %}&amount={{ v }}{% endif %}"
-       style="text-decoration:none;">
-      <div style="
-        padding:1rem;border-radius:10px;text-align:center;cursor:pointer;
-        border:2px solid {% if is_young %}#7c83ff{% else %}#2d3148{% endif %};
-        background:{% if is_young %}#1e2040{% else %}#0f1117{% endif %};
-      ">
-        <div style="font-size:1.5rem;margin-bottom:0.35rem;">💼</div>
-        <div style="font-size:0.88rem;font-weight:700;color:#e2e8f0;">Jovem Profissional</div>
-        <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem;">R$ 3.500 – 5.000/mês</div>
-      </div>
-    </a>
-
-    <a href="/saldo-real?profile=family{% if let Some(v) = purchase_amount %}&amount={{ v }}{% endif %}"
-       style="text-decoration:none;">
-      <div style="
-        padding:1rem;border-radius:10px;text-align:center;cursor:pointer;
-        border:2px solid {% if is_family %}#7c83ff{% else %}#2d3148{% endif %};
-        background:{% if is_family %}#1e2040{% else %}#0f1117{% endif %};
-      ">
-        <div style="font-size:1.5rem;margin-bottom:0.35rem;">🏠</div>
-        <div style="font-size:0.88rem;font-weight:700;color:#e2e8f0;">Família</div>
-        <div style="font-size:0.75rem;color:#64748b;margin-top:0.2rem;">R$ 7.000 – 9.500/mês</div>
-      </div>
-    </a>
-
-  </div>
-
-  <!-- Perfil gerado -->
-  {% if let Some(sim) = sim_profile %}
-  <div style="background:#0f1117;border-radius:8px;padding:0.9rem 1rem;margin-bottom:1rem;
-              border-left:3px solid #7c83ff;">
-    <p style="color:#7c83ff;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.6rem;">
-      Perfil gerado — {{ sim.label }}
-    </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem 1rem;font-size:0.83rem;">
-      <span style="color:#64748b;">Renda mensal</span>
-      <span style="text-align:right;color:#4ade80;font-family:monospace;">R$ {{ sim.income }}</span>
-      <span style="color:#64748b;">Fatura cartão</span>
-      <span style="text-align:right;color:#f87171;font-family:monospace;">R$ {{ sim.card_bill }}</span>
-      <span style="color:#64748b;">Boletos (15 dias)</span>
-      <span style="text-align:right;color:#f87171;font-family:monospace;">R$ {{ sim.pending_bills }}</span>
-      <span style="color:#64748b;">Gastos variáveis</span>
-      <span style="text-align:right;color:#f87171;font-family:monospace;">R$ {{ sim.variable_spend }}</span>
-      <span style="color:#64748b;">Meta de reserva</span>
-      <span style="text-align:right;color:#f87171;font-family:monospace;">R$ {{ sim.savings_goal }}</span>
-      <span style="color:#64748b;">Salário em</span>
-      <span style="text-align:right;color:#94a3b8;font-family:monospace;">{{ sim.days_until_salary }} dias</span>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Input de valor -->
   <form method="GET" action="/saldo-real">
-    {% if !active_kind.is_empty() %}
-    <input type="hidden" name="profile" value="{{ active_kind }}"/>
-    {% endif %}
     <label style="font-size:0.85rem;color:#94a3b8;display:block;margin-bottom:0.5rem;">
-      Quanto você quer gastar?
+      How much do you want to spend?
     </label>
     <div style="display:flex;gap:0.6rem;">
       <div style="position:relative;flex:1;">
@@ -111,23 +32,22 @@
           placeholder="350,00"
           value="{% if let Some(v) = purchase_amount %}{{ v }}{% endif %}"
           style="padding-left:2.4rem;font-size:1rem;font-weight:600;margin-bottom:0;"
-          autocomplete="off"
+          autocomplete="off" autofocus
         />
       </div>
       <button type="submit" style="padding:0.65rem 1.25rem;white-space:nowrap;">
-        Analisar →
+        Analyze →
       </button>
     </div>
   </form>
 </div>
 
-<!-- ── Resultado ─────────────────────────────────────────────────────────── -->
+<!-- Analysis result -->
 {% if let Some(analysis) = analysis %}
 <div style="
   background:#1a1d27;border-radius:12px;padding:1.5rem;
   border:2px solid {% if analysis.is_green %}#4ade80{% else if analysis.is_yellow %}#facc15{% else %}#e05c6c{% endif %};
 ">
-  <!-- Headline -->
   <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1.25rem;">
     <span style="font-size:1.75rem;line-height:1;">{{ analysis.level_emoji }}</span>
     <span style="font-size:1.05rem;font-weight:700;
@@ -137,7 +57,6 @@
     ">{{ analysis.headline }}</span>
   </div>
 
-  <!-- Detalhe direto -->
   <div style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:1.25rem;">
     {% for line in analysis.detail_lines %}
     <p style="color:#cbd5e1;font-size:0.88rem;padding-left:0.5rem;
@@ -145,38 +64,32 @@
     {% endfor %}
   </div>
 
-  <!-- Cálculo (colapsado visualmente) -->
   <details style="margin-bottom:1rem;">
-    <summary style="color:#64748b;font-size:0.8rem;cursor:pointer;
-                    list-style:none;padding:0.5rem 0;">
-      ▸ Ver como foi calculado
+    <summary style="color:#64748b;font-size:0.8rem;cursor:pointer;list-style:none;padding:0.5rem 0;">
+      ▸ See how this was calculated
     </summary>
     <div style="margin-top:0.75rem;background:#0f1117;border-radius:8px;padding:0.9rem;">
       <div style="display:grid;grid-template-columns:1fr auto;gap:0.35rem 1rem;font-size:0.83rem;">
-        <span style="color:#94a3b8;">Saldo disponível</span>
-        <span style="font-family:monospace;text-align:right;color:#e2e8f0;">R$ {{ analysis.breakdown.current_balance }}</span>
-        <span style="color:#f87171;">− Fatura ({{ analysis.breakdown.card_bill_days }}d)</span>
+        <span style="color:#94a3b8;">Monthly income</span>
+        <span style="font-family:monospace;text-align:right;color:#e2e8f0;">R$ {{ analysis.breakdown.monthly_income }}</span>
+        <span style="color:#f87171;">− Card bill ({{ analysis.breakdown.card_bill_days }}d)</span>
         <span style="font-family:monospace;text-align:right;color:#f87171;">R$ {{ analysis.breakdown.card_bill }}</span>
-        <span style="color:#f87171;">− Boletos (15d)</span>
+        <span style="color:#f87171;">− Pending bills (15d)</span>
         <span style="font-family:monospace;text-align:right;color:#f87171;">R$ {{ analysis.breakdown.pending_bills }}</span>
-        <span style="color:#f87171;">− Gastos variáveis</span>
+        <span style="color:#f87171;">− Variable expenses</span>
         <span style="font-family:monospace;text-align:right;color:#f87171;">R$ {{ analysis.breakdown.variable_spend }}</span>
-        <span style="color:#f87171;">− Meta de reserva</span>
+        <span style="color:#f87171;">− Savings goal</span>
         <span style="font-family:monospace;text-align:right;color:#f87171;">R$ {{ analysis.breakdown.savings_goal }}</span>
-        <span style="color:#e2e8f0;font-weight:700;padding-top:0.4rem;border-top:1px solid #2d3148;">
-          = Saldo Livre Real
-        </span>
+        <span style="color:#e2e8f0;font-weight:700;padding-top:0.4rem;border-top:1px solid #2d3148;">= Free balance</span>
         <span style="font-family:monospace;text-align:right;font-weight:700;padding-top:0.4rem;
                      border-top:1px solid #2d3148;
-                     {% if analysis.breakdown.true_free_negative %}color:#f87171;
-                     {% else %}color:#4ade80;{% endif %}">
+                     {% if analysis.breakdown.true_free_negative %}color:#f87171;{% else %}color:#4ade80;{% endif %}">
           R$ {{ analysis.breakdown.true_free_balance }}
         </span>
       </div>
     </div>
   </details>
 
-  <!-- Sugestão -->
   {% if let Some(suggestion) = analysis.suggestion %}
   <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem;
             padding:0.75rem;background:#0f1117;border-radius:8px;">
@@ -184,25 +97,24 @@
   </p>
   {% endif %}
 
-  <!-- Ações -->
   <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
     {% if analysis.is_green %}
       <button style="flex:2;background:#4ade80;color:#0f1117;font-weight:700;"
-        onclick="alert('Simulação: compra aprovada! 🎉')">
-        ✓ Confirmar Compra
+        onclick="alert('Simulation: purchase approved!')">
+        ✓ Confirm Purchase
       </button>
     {% else %}
       {% if let Some(inst) = analysis.installment_text %}
       <button style="flex:2;background:#7c83ff;"
-        onclick="alert('Simulação: parcelamento em {{ inst }} registrado!')">
-        💳 Parcelar em {{ inst }}
+        onclick="alert('Simulation: installment plan {{ inst }} registered!')">
+        Installment plan {{ inst }}
       </button>
       {% endif %}
     {% endif %}
-    <a href="/saldo-real{% if !active_kind.is_empty() %}?profile={{ active_kind }}{% endif %}"
+    <a href="/saldo-real"
        style="flex:1;text-align:center;padding:0.65rem;border:1px solid #2d3148;
               border-radius:8px;color:#94a3b8;font-size:0.88rem;text-decoration:none;">
-      ← Nova análise
+      ← New analysis
     </a>
   </div>
 </div>
