@@ -41,11 +41,12 @@ impl FinancialProfile {
     ///     days_until_salary: 10,
     ///     monthly_income_cents: 500_000,
     /// };
-    /// let free = profile.true_free_balance(150_000);
-    /// assert_eq!(free, -20_000_i64); // R$ -200,00
+    /// let free = profile.true_free_balance(0);
+    /// assert_eq!(free, 330_000_i64); // R$ 3.300,00
     /// ```
-    pub fn true_free_balance(&self, current_balance_cents: u64) -> i64 {
-        current_balance_cents as i64
+    /// Returns what is left from the salary after all obligations.
+    pub fn true_free_balance(&self, _current_balance_cents: u64) -> i64 {
+        self.monthly_income_cents as i64
             - self.card_bill_cents as i64
             - self.pending_bills_cents as i64
             - self.estimated_variable_spend_cents as i64
@@ -83,7 +84,7 @@ pub struct InstallmentSuggestion {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpendingBreakdown {
-    pub current_balance_cents: u64,
+    pub monthly_income_cents: u64,
     pub card_bill_cents: u64,
     pub card_bill_days: u8,
     pub pending_bills_cents: u64,
@@ -106,7 +107,7 @@ pub fn analyze_purchase(
     let after_purchase = true_free - purchase_cents as i64;
 
     let breakdown = SpendingBreakdown {
-        current_balance_cents,
+        monthly_income_cents: profile.monthly_income_cents,
         card_bill_cents: profile.card_bill_cents,
         card_bill_days: profile.card_bill_days,
         pending_bills_cents: profile.pending_bills_cents,
@@ -120,18 +121,18 @@ pub fn analyze_purchase(
             level: AlertLevel::Green,
             true_free_balance_cents: true_free,
             free_balance_after_purchase_cents: after_purchase,
-            headline: "✅ Pode gastar! Seu Saldo Livre cobre essa compra.".into(),
+            headline: "✅ Good to go! Your Free Balance covers this purchase.".into(),
             detail_lines: vec![
                 format!(
-                    "Seu Saldo Livre Real é de R$ {}, após descontar todas as contas previstas.",
+                    "Your Real Free Balance is R$ {}, after deducting all projected expenses.",
                     fmt_brl(true_free.unsigned_abs())
                 ),
                 format!(
-                    "Após essa compra ainda sobrarão R$ {} livres.",
+                    "After this purchase you will still have R$ {} free.",
                     fmt_brl(after_purchase.unsigned_abs())
                 ),
                 format!(
-                    "Sua meta de guardar R$ {} este mês continua preservada. 🎯",
+                    "Your savings goal of R$ {} this month remains intact. 🎯",
                     fmt_brl(profile.monthly_savings_goal_cents)
                 ),
             ],
@@ -144,10 +145,8 @@ pub fn analyze_purchase(
     // ── Red: purchase would cause negative free balance ──────────────────────
     let shortfall = after_purchase.unsigned_abs();
 
-    // Check if installments would help (up to 6x, each fitting in future months)
     let installment_suggestion = (2u8..=6).find_map(|n| {
-        let per_installment = (purchase_cents + n as u64 - 1) / n as u64; // ceiling div
-        // fits if each installment is covered by projected free monthly income
+        let per_installment = (purchase_cents + n as u64 - 1) / n as u64;
         let projected_free_monthly = (profile.monthly_income_cents as i64
             - profile.card_bill_cents as i64
             - profile.pending_bills_cents as i64
@@ -166,23 +165,19 @@ pub fn analyze_purchase(
 
     let mut detail_lines = vec![
         format!(
-            "Seu saldo no banco é R$ {}, mas seu Saldo Livre Real é de apenas R$ {}.",
-            fmt_brl(current_balance_cents),
-            if true_free >= 0 {
-                fmt_brl(true_free.unsigned_abs())
-            } else {
-                format!("-R$ {}", fmt_brl(true_free.unsigned_abs()))
-            }
+            "Your Real Free Balance is R$ {}, calculated from your salary of R$ {} minus all obligations.",
+            fmt_brl(true_free.unsigned_abs()),
+            fmt_brl(profile.monthly_income_cents)
         ),
         format!(
-            "Se comprar agora, vai faltar R$ {} para cobrir suas obrigações.",
+            "If you buy now, you will be short R$ {} to cover your obligations.",
             fmt_brl(shortfall)
         ),
     ];
 
     if profile.card_bill_days <= 7 {
         detail_lines.push(format!(
-            "⚠️ Sua fatura de R$ {} fecha em apenas {} dias.",
+            "⚠️ Your card bill of R$ {} closes in just {} days.",
             fmt_brl(profile.card_bill_cents),
             profile.card_bill_days
         ));
@@ -190,25 +185,24 @@ pub fn analyze_purchase(
 
     if profile.pending_bills_cents > 0 {
         detail_lines.push(format!(
-            "📋 Você tem R$ {} em boletos vencendo nos próximos 15 dias.",
+            "📋 You have R$ {} in bills due within the next 15 days.",
             fmt_brl(profile.pending_bills_cents)
         ));
     }
 
     detail_lines.push(format!(
-        "🎯 Esta compra também cancela sua meta de guardar R$ {} este mês.",
+        "🎯 This purchase also cancels your savings goal of R$ {} this month.",
         fmt_brl(profile.monthly_savings_goal_cents)
     ));
 
     let suggestion = installment_suggestion.as_ref().map(|s| {
         format!(
-            "💡 Parcelar em {}x de R$ {} caberia no seu Saldo Livre dos próximos meses sem comprometer seus investimentos.",
+            "💡 Splitting into {}x of R$ {} would fit your Free Balance over the next months without compromising your investments.",
             s.installments,
             fmt_brl(s.installment_cents)
         )
-    }).or_else(|| Some("💡 Considere adiar essa compra até o próximo salário ou rever sua meta de economia.".into()));
+    }).or_else(|| Some("💡 Consider postponing this purchase until next payday or revising your savings goal.".into()));
 
-    // Yellow: free balance is negative but bank balance technically covers it
     let level = if true_free >= 0 {
         AlertLevel::Yellow
     } else {
@@ -216,8 +210,8 @@ pub fn analyze_purchase(
     };
 
     let headline = match level {
-        AlertLevel::Yellow => "⚠️ Repense a Compra — seu Saldo Livre não cobre isso.".into(),
-        _ => "🔴 Compra Arriscada — você vai estourar suas obrigações.".into(),
+        AlertLevel::Yellow => "⚠️ Rethink this Purchase — your Free Balance does not cover it.".into(),
+        _ => "🔴 Risky Purchase — you will exceed your obligations.".into(),
     };
 
     PurchaseAnalysis {
@@ -249,29 +243,32 @@ pub fn proactive_alerts(
     let mut alerts = Vec::new();
     let true_free = profile.true_free_balance(current_balance_cents);
 
+    let goal_met = current_balance_cents >= profile.monthly_savings_goal_cents;
+
     if true_free < 0 {
         alerts.push(WalletAlert {
             level: AlertLevel::Red,
             message: format!(
-                "🔴 Saldo Livre Real negativo! Suas obrigações superam seu saldo em R$ {}. Evite novas despesas.",
+                "🔴 Negative Real Free Balance! Your obligations exceed your salary by R$ {}. Avoid new expenses.",
                 fmt_brl(true_free.unsigned_abs())
             ),
         });
-    } else if (true_free as u64) < profile.monthly_savings_goal_cents {
+    } else if !goal_met {
         alerts.push(WalletAlert {
             level: AlertLevel::Yellow,
             message: format!(
-                "🟡 Seu Saldo Livre Real (R$ {}) é menor que sua meta de reserva (R$ {}). Cuidado com novos gastos.",
-                fmt_brl(true_free.unsigned_abs()),
-                fmt_brl(profile.monthly_savings_goal_cents)
+                "🟡 Savings goal (R$ {}) not yet reached. Invested so far: R$ {}.",
+                fmt_brl(profile.monthly_savings_goal_cents),
+                fmt_brl(current_balance_cents)
             ),
         });
     } else {
         alerts.push(WalletAlert {
             level: AlertLevel::Green,
             message: format!(
-                "🟢 Finanças saudáveis! Saldo Livre Real de R$ {} e meta de reserva preservada.",
-                fmt_brl(true_free.unsigned_abs())
+                "🟢 Savings goal reached! R$ {} invested (goal: R$ {}).",
+                fmt_brl(current_balance_cents),
+                fmt_brl(profile.monthly_savings_goal_cents)
             ),
         });
     }
@@ -280,7 +277,7 @@ pub fn proactive_alerts(
         alerts.push(WalletAlert {
             level: AlertLevel::Red,
             message: format!(
-                "🔴 Fatura de R$ {} fecha em {} dias. Certifique-se que o saldo cobre.",
+                "🔴 Card bill of R$ {} closes in {} days. Make sure your balance covers it.",
                 fmt_brl(profile.card_bill_cents),
                 profile.card_bill_days
             ),
@@ -289,7 +286,7 @@ pub fn proactive_alerts(
         alerts.push(WalletAlert {
             level: AlertLevel::Yellow,
             message: format!(
-                "🟡 Fatura de R$ {} fecha em {} dias.",
+                "🟡 Card bill of R$ {} closes in {} days.",
                 fmt_brl(profile.card_bill_cents),
                 profile.card_bill_days
             ),
@@ -300,7 +297,7 @@ pub fn proactive_alerts(
         alerts.push(WalletAlert {
             level: AlertLevel::Green,
             message: format!(
-                "🟢 Salário previsto em {} dias (R$ {}).",
+                "🟢 Salary expected in {} days (R$ {}).",
                 profile.days_until_salary,
                 fmt_brl(profile.monthly_income_cents)
             ),
@@ -347,8 +344,8 @@ mod tests {
 
     #[test]
     fn true_free_balance_scenario() {
-        // 150_000 - 80_000 - 45_000 - 15_000 - 30_000 = -20_000
-        assert_eq!(profile().true_free_balance(150_000), -20_000);
+        // 500_000 - 80_000 - 45_000 - 15_000 - 30_000 = 330_000
+        assert_eq!(profile().true_free_balance(0), 330_000);
     }
 
     #[test]
@@ -360,17 +357,22 @@ mod tests {
             estimated_variable_spend_cents: 5_000,
             monthly_savings_goal_cents: 10_000,
             days_until_salary: 15,
+            // free = 500_000 - 30_000 = 470_000; purchase = 20_000; after = 450_000
             monthly_income_cents: 500_000,
         };
-        // free = 100_000 - 30_000 = 70_000; purchase = 20_000; after = 50_000
-        let result = analyze_purchase(&p, 100_000, 20_000);
+        let result = analyze_purchase(&p, 0, 20_000);
         assert_eq!(result.level, AlertLevel::Green);
-        assert_eq!(result.free_balance_after_purchase_cents, 50_000);
+        assert_eq!(result.free_balance_after_purchase_cents, 450_000);
     }
 
     #[test]
     fn analyze_red_when_purchase_causes_shortfall() {
-        let result = analyze_purchase(&profile(), 150_000, 35_000);
+        // free = 330_000; purchase = 400_000 -> after = -70_000
+        // free was positive before purchase -> Yellow
+        // To get Red, need free already negative: income too low
+        let mut p = profile();
+        p.monthly_income_cents = 100_000; // free = 100_000 - 170_000 = -70_000 (already negative)
+        let result = analyze_purchase(&p, 0, 1_000);
         assert_eq!(result.level, AlertLevel::Red);
         assert!(result.free_balance_after_purchase_cents < 0);
     }
@@ -384,10 +386,10 @@ mod tests {
             estimated_variable_spend_cents: 5_000,
             monthly_savings_goal_cents: 10_000,
             days_until_salary: 15,
-            monthly_income_cents: 500_000,
+            // free = 70_000 - 30_000 = 40_000; purchase = 50_000 -> yellow
+            monthly_income_cents: 70_000,
         };
-        // free = 40_000; purchase = 50_000 → yellow (free was positive, now negative)
-        let result = analyze_purchase(&p, 70_000, 50_000);
+        let result = analyze_purchase(&p, 0, 50_000);
         assert_eq!(result.level, AlertLevel::Yellow);
     }
 
@@ -399,8 +401,16 @@ mod tests {
     }
 
     #[test]
-    fn proactive_alerts_returns_red_when_negative_free_balance() {
-        let alerts = proactive_alerts(&profile(), 150_000);
-        assert!(alerts.iter().any(|a| a.level == AlertLevel::Red));
+    fn proactive_alerts_healthy_when_income_covers_expenses() {
+        // invested (80_000) > goal (30_000) and true_free > 0 -> green
+        let alerts = proactive_alerts(&profile(), 80_000);
+        assert!(alerts.iter().any(|a| a.level == AlertLevel::Green));
+    }
+
+    #[test]
+    fn proactive_alerts_yellow_when_goal_not_met() {
+        // invested (10_000) < goal (30_000) -> yellow
+        let alerts = proactive_alerts(&profile(), 10_000);
+        assert!(alerts.iter().any(|a| a.level == AlertLevel::Yellow));
     }
 }

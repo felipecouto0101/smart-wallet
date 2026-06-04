@@ -64,6 +64,43 @@ impl FinancialProfileRepositoryPg {
         Ok(profile)
     }
 
+    pub async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            card_bill_cents:                i64,
+            card_bill_days:                 i16,
+            pending_bills_cents:            i64,
+            estimated_variable_spend_cents: i64,
+            monthly_savings_goal_cents:     i64,
+            days_until_salary:              i16,
+            monthly_income_cents:           i64,
+        }
+        let row: Option<Row> = sqlx::query_as(
+            r#"SELECT card_bill_cents, card_bill_days, pending_bills_cents,
+                      estimated_variable_spend_cents, monthly_savings_goal_cents,
+                      days_until_salary, monthly_income_cents
+               FROM financial_profiles WHERE user_id = $1"#,
+        )
+        .bind(user_id.0)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|_| BusinessError::UserNotFound)?;
+
+        Ok(row.map(|r| FinancialProfile {
+            card_bill_cents:                r.card_bill_cents as u64,
+            card_bill_days:                 r.card_bill_days as u8,
+            pending_bills_cents:            r.pending_bills_cents as u64,
+            estimated_variable_spend_cents: r.estimated_variable_spend_cents as u64,
+            monthly_savings_goal_cents:     r.monthly_savings_goal_cents as u64,
+            days_until_salary:              r.days_until_salary as u8,
+            monthly_income_cents:           r.monthly_income_cents as u64,
+        }))
+    }
+
+    pub async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
+        self.upsert(user_id, p).await
+    }
+
     async fn upsert(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
         sqlx::query(
             r#"INSERT INTO financial_profiles
@@ -166,6 +203,15 @@ impl ProfileKind {
             Self::Family            => (15, 25),
         }
     }
+
+    /// Investment reserved range (cents) — already separated from expenses.
+    pub fn investment_range(&self) -> (u64, u64) {
+        match self {
+            Self::Student           => (5_000,  30_000),
+            Self::YoungProfessional => (30_000, 150_000),
+            Self::Family            => (80_000, 400_000),
+        }
+    }
 }
 
 /// Extracts a u64 seed from the first 8 bytes of a UUID.
@@ -187,11 +233,25 @@ fn rand_range(state: &mut u64, lo: u64, hi: u64) -> u64 {
 }
 
 /// Generates a synthetic profile constrained to the given `ProfileKind` ranges.
-/// Uses a fresh time-based seed so each "Testar" click produces new numbers.
-pub fn generate_for_kind(kind: ProfileKind) -> FinancialProfile {
-    // Time-based seed: changes every millisecond → different on every click
+/// Uses a fresh time-based seed so each click produces new numbers.
+/// Returns `(profile, simulated_bank_balance_cents, seed)` — seed can be
+/// passed back via URL to reproduce the exact same profile on re-renders.
+pub fn generate_for_kind(kind: ProfileKind) -> (FinancialProfile, u64, u64) {
     let seed = chrono::Utc::now().timestamp_millis() as u64;
-    generate_synthetic_ranged(seed, kind)
+    let mut s = seed;
+    let profile = generate_synthetic_ranged(seed, kind);
+    let (inv_lo, inv_hi) = kind.investment_range();
+    let investment = rand_range(&mut s, inv_lo, inv_hi);
+    (profile, investment, seed)
+}
+
+/// Reproduces a previously generated profile using the stored seed.
+pub fn reproduce_for_kind(kind: ProfileKind, seed: u64) -> (FinancialProfile, u64) {
+    let mut s = seed;
+    let profile = generate_synthetic_ranged(seed, kind);
+    let (inv_lo, inv_hi) = kind.investment_range();
+    let investment = rand_range(&mut s, inv_lo, inv_hi);
+    (profile, investment)
 }
 
 /// Generates a realistic synthetic financial profile for a Brazilian user
@@ -223,6 +283,20 @@ fn generate_synthetic_ranged(seed: u64, kind: ProfileKind) -> FinancialProfile {
     let monthly_savings_goal_cents = monthly_income_cents * savings_pct / 100;
 
     let days_until_salary = rand_range(&mut s, 1, 30) as u8;
+
+    // Garante que a soma das despesas não ultrapasse 90% do salário.
+    // Se ultrapassar, escala proporcionalmente mantendo as relações entre elas.
+    let total_expenses = card_bill_cents + pending_bills_cents
+        + estimated_variable_spend_cents + monthly_savings_goal_cents;
+    let budget = monthly_income_cents * 90 / 100;
+    let (card_bill_cents, pending_bills_cents, estimated_variable_spend_cents, monthly_savings_goal_cents) =
+        if total_expenses > budget {
+            let scale = |v: u64| (v as u128 * budget as u128 / total_expenses as u128) as u64;
+            (scale(card_bill_cents), scale(pending_bills_cents),
+             scale(estimated_variable_spend_cents), scale(monthly_savings_goal_cents))
+        } else {
+            (card_bill_cents, pending_bills_cents, estimated_variable_spend_cents, monthly_savings_goal_cents)
+        };
 
     FinancialProfile {
         card_bill_cents,
@@ -277,5 +351,21 @@ mod tests {
         assert_eq!(ProfileKind::from_str("student"),  ProfileKind::Student);
         assert_eq!(ProfileKind::from_str("family"),   ProfileKind::Family);
         assert_eq!(ProfileKind::from_str("anything"), ProfileKind::YoungProfessional);
+    }
+
+    #[test]
+    fn expenses_never_exceed_90_pct_of_income() {
+        for seed in [1u64, 42, 999, 123_456, u64::MAX / 2] {
+            for kind in [ProfileKind::Student, ProfileKind::YoungProfessional, ProfileKind::Family] {
+                let p = generate_synthetic_ranged(seed, kind);
+                let total = p.card_bill_cents + p.pending_bills_cents
+                    + p.estimated_variable_spend_cents + p.monthly_savings_goal_cents;
+                assert!(
+                    total <= p.monthly_income_cents * 90 / 100,
+                    "seed={seed} kind={kind:?}: expenses {total} > 90% of income {}",
+                    p.monthly_income_cents
+                );
+            }
+        }
     }
 }

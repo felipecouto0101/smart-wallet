@@ -8,4 +8,4 @@ pub use db::connect;
 pub use price_provider::LivePriceProvider;
 pub use repositories::asset::update_prices;
 pub use repositories::FinancialProfileRepositoryPg;
-pub use repositories::{ProfileKind, generate_for_kind};
+pub use repositories::{ProfileKind, generate_for_kind, reproduce_for_kind};

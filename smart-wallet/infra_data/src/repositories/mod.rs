@@ -7,4 +7,4 @@ pub use user::UserRepositoryPg;
 pub use wallet::WalletRepositoryPg;
 pub use asset::AssetRepositoryPg;
 pub use financial_profile::FinancialProfileRepositoryPg;
-pub use financial_profile::{ProfileKind, generate_for_kind};
+pub use financial_profile::{ProfileKind, generate_for_kind, reproduce_for_kind};

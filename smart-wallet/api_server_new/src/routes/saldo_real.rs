@@ -2,17 +2,15 @@
 
 use std::sync::Arc;
 use askama::Template;
-use askama_axum::IntoResponse as AskamaIntoResponse;
 use axum::{
     extract::{Query, State},
     http::HeaderMap,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     Json,
 };
 use serde::Deserialize;
 
 use core_business::{analyze_purchase, proactive_alerts, fmt_brl, AlertLevel, WalletAlert};
-use infra_data::{ProfileKind, generate_for_kind};
 use crate::{auth::{validate_token, JWT_COOKIE}, state::AppState};
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
@@ -33,7 +31,7 @@ fn get_user_id(headers: &HeaderMap, secret: &str) -> Option<core_business::UserI
 // ── Template structs ─────────────────────────────────────────────────────────
 
 pub struct BreakdownView {
-    pub current_balance: String,
+    pub monthly_income: String,
     pub card_bill: String,
     pub card_bill_days: u8,
     pub pending_bills: String,
@@ -60,16 +58,6 @@ pub struct AlertView {
     pub is_yellow: bool,
 }
 
-pub struct SimProfileView {
-    pub label: String,
-    pub income: String,
-    pub card_bill: String,
-    pub pending_bills: String,
-    pub variable_spend: String,
-    pub savings_goal: String,
-    pub days_until_salary: u8,
-}
-
 #[derive(Template)]
 #[template(path = "saldo_real.html")]
 #[allow(dead_code)]
@@ -78,20 +66,13 @@ pub struct SaldoRealPage {
     pub proactive_alerts: Vec<AlertView>,
     pub analysis: Option<AnalysisView>,
     pub purchase_amount: Option<String>,
-    pub sim_profile: Option<SimProfileView>,
-    pub active_kind: String,
-    pub is_student: bool,
-    pub is_young: bool,
-    pub is_family: bool,
 }
 
 // ── Query params ─────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct AnalyzeQuery {
-    pub amount:   Option<String>,
-    /// "student" | "young" | "family" — triggers simulation mode
-    pub profile:  Option<String>,
+    pub amount: Option<String>,
 }
 
 // ── Page handler ─────────────────────────────────────────────────────────────
@@ -101,8 +82,6 @@ pub async fn get_saldo_real(
     headers: HeaderMap,
     Query(params): Query<AnalyzeQuery>,
 ) -> Response {
-    use axum::response::Redirect;
-
     let Some(id) = get_user_id(&headers, &state.jwt_secret) else {
         return Redirect::to("/login").into_response();
     };
@@ -112,54 +91,21 @@ pub async fn get_saldo_real(
         Err(_) => return Redirect::to("/login").into_response(),
     };
 
-    // ── Choose profile: simulation or persistent ─────────────────────────────
-    let (profile, sim_profile, active_kind, is_student, is_young, is_family) = if let Some(ref kind_str) = params.profile {
-        let kind = ProfileKind::from_str(kind_str);
-        let p = generate_for_kind(kind);
-        let view = SimProfileView {
-            label:             kind.label().to_string(),
-            income:            fmt_brl(p.monthly_income_cents),
-            card_bill:         fmt_brl(p.card_bill_cents),
-            pending_bills:     fmt_brl(p.pending_bills_cents),
-            variable_spend:    fmt_brl(p.estimated_variable_spend_cents),
-            savings_goal:      fmt_brl(p.monthly_savings_goal_cents),
-            days_until_salary: p.days_until_salary,
-        };
-        let is_student = kind == ProfileKind::Student;
-        let is_young   = kind == ProfileKind::YoungProfessional;
-        let is_family  = kind == ProfileKind::Family;
-        (p, Some(view), kind_str.clone(), is_student, is_young, is_family)
-    } else {
-        let p = match state.profile_repo.get_or_generate(&id).await {
-            Ok(p) => p,
-            Err(_) => return Redirect::to("/wallet").into_response(),
-        };
-        (p, None, String::new(), false, false, false)
+    // Perfil vem do banco — gerado pelo post_simulate na wallet
+    let profile = match state.profile_repo.find_only(&id).await {
+        Ok(Some(p)) => p,
+        _ => return Redirect::to("/wallet").into_response(),
     };
 
-    // In simulation mode use a fixed illustrative balance; otherwise use real wallet
-    let balance = if params.profile.is_some() {
-        // Balance = ~60% of simulated income (realistic "mid-month" scenario)
-        (profile.monthly_income_cents as f64 * 0.6).round() as u64
-    } else {
-        wallet.balance_cents
-    };
-
+    let balance = wallet.balance_cents;
     let p_alerts = proactive_alerts(&profile, balance);
-
     let (analysis, purchase_amount) = build_analysis(&profile, balance, &params.amount);
 
-    use askama::Template;
     let page = SaldoRealPage {
-        balance_display: fmt_brl(balance),
+        balance_display:  fmt_brl(balance),
         proactive_alerts: p_alerts.into_iter().map(alert_to_view).collect(),
         analysis,
         purchase_amount,
-        sim_profile,
-        active_kind,
-        is_student,
-        is_young,
-        is_family,
     };
     axum::response::Html(page.render().unwrap()).into_response()
 }
@@ -182,19 +128,11 @@ pub async fn api_analyze(
         Err(e) => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     };
 
-    let (profile, balance) = if let Some(ref kind_str) = params.profile {
-        let p = generate_for_kind(ProfileKind::from_str(kind_str));
-        let b = (p.monthly_income_cents as f64 * 0.6).round() as u64;
-        (p, b)
-    } else {
-        match state.profile_repo.get_or_generate(&id).await {
-            Ok(p) => {
-                let b = wallet.balance_cents;
-                (p, b)
-            }
-            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
-        }
+    let profile = match state.profile_repo.get_or_generate(&id).await {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
     };
+    let balance = wallet.balance_cents;
 
     let p_alerts: Vec<_> = proactive_alerts(&profile, balance)
         .into_iter()
@@ -242,7 +180,7 @@ fn build_analysis(
 
     let free = result.true_free_balance_cents;
     let breakdown = BreakdownView {
-        current_balance:   fmt_brl(result.breakdown.current_balance_cents),
+        monthly_income:     fmt_brl(result.breakdown.monthly_income_cents),
         card_bill:         fmt_brl(result.breakdown.card_bill_cents),
         card_bill_days:    result.breakdown.card_bill_days,
         pending_bills:     fmt_brl(result.breakdown.pending_bills_cents),
