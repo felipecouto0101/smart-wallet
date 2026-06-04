@@ -23,6 +23,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/wallet",       get(pages::get_wallet))
         .route("/wallet/buy",   post(pages::post_buy))
         .route("/wallet/sell",  post(pages::post_sell))
+        .route("/wallet/simulate", post(pages::post_simulate))
         // JSON API
         .route("/api/assets",          get(assets::list))
         .route("/api/register",        post(auth::register))

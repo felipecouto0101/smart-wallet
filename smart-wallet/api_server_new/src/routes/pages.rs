@@ -5,7 +5,7 @@ use askama::Template;
 use askama_axum::IntoResponse;
 use axum::{
     extract::{Form, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{Redirect, Response},
 };
 use secrecy::SecretString;
@@ -13,7 +13,9 @@ use serde::Deserialize;
 
 use core_business::domain::user::CreateUserDto;
 use core_business::domain::order::OrderType;
+use core_business::fmt_brl;
 use infra_data::repositories::user::verify_password;
+use infra_data::{ProfileKind, generate_for_kind};
 use crate::auth::{generate_token, validate_token, JWT_COOKIE};
 use crate::state::AppState;
 
@@ -42,6 +44,11 @@ pub struct AssetView {
 #[template(path = "assets.html")]
 pub struct AssetsPage {
     pub assets: Vec<AssetView>,
+    pub positions: Vec<PositionView>,
+    pub orders: Vec<OrderView>,
+    pub balance_display: String,
+    pub message: Option<String>,
+    pub error: Option<String>,
 }
 
 pub struct PositionView {
@@ -64,14 +71,23 @@ pub struct OrderView {
     pub total_display: String,
 }
 
+pub struct SimExpenseView {
+    pub label: String,
+    pub amount: String,
+}
+
+pub struct SimProfileSummary {
+    pub income: String,
+    pub expenses: Vec<SimExpenseView>,
+}
+
 #[derive(Template)]
 #[template(path = "wallet.html")]
 pub struct WalletPage {
     pub balance_display: String,
-    pub positions: Vec<PositionView>,
-    pub orders: Vec<OrderView>,
     pub message: Option<String>,
     pub error: Option<String>,
+    pub sim_profile: Option<SimProfileSummary>,
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -194,18 +210,55 @@ pub async fn post_register(
     }
 }
 
-pub async fn get_assets(State(state): State<Arc<AppState>>) -> Response {
-    match state.asset_repo.list_all().await {
-        Ok(list) => AssetsPage {
-            assets: list.into_iter().map(|a| AssetView {
-                symbol: a.asset_type.symbol().to_string(),
-                name: a.asset_type.name().to_string(),
-                price_display: cents_to_display(a.price_cents),
-                price_cents: a.price_cents,
-            }).collect(),
-        }.into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to load assets").into_response(),
-    }
+pub async fn get_assets(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let Some(id) = get_user_id(&headers, &state.jwt_secret) else {
+        return Redirect::to("/login").into_response();
+    };
+
+    let asset_list = state.asset_repo.list_all().await.unwrap_or_default();
+    let wallet = state.wallet_repo.find(&id).await.ok();
+    let orders = state.wallet_repo.order_history(&id).await.unwrap_or_default();
+
+    AssetsPage {
+        assets: asset_list.iter().map(|a| AssetView {
+            symbol: a.asset_type.symbol().to_string(),
+            name: a.asset_type.name().to_string(),
+            price_display: cents_to_display(a.price_cents),
+            price_cents: a.price_cents,
+        }).collect(),
+        positions: wallet.as_ref().map(|w| w.positions.values().map(|p| {
+            let price_cents = asset_list.iter()
+                .find(|a| a.asset_type == p.asset_type)
+                .map(|a| a.price_cents)
+                .unwrap_or(0);
+            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
+            PositionView {
+                symbol: p.asset_type.symbol().to_string(),
+                quantity: p.quantity,
+                price_cents,
+                price_display: cents_to_display(price_cents),
+                total_display: total_to_display(price_cents, p.quantity),
+                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
+                pnl_display,
+                pnl_pct,
+                pnl_positive,
+            }
+        }).collect()).unwrap_or_default(),
+        orders: orders.iter().map(|o| OrderView {
+            is_buy: o.order_type == OrderType::Buy,
+            symbol: o.asset.symbol().to_string(),
+            quantity: o.quantity,
+            unit_price_display: cents_to_display(o.price_cents),
+            total_display: total_to_display(o.price_cents, o.quantity),
+        }).collect(),
+        balance_display: cents_to_display(wallet.map(|w| w.balance_cents).unwrap_or(0)),
+        message: params.get("msg").cloned(),
+        error: params.get("err").map(|e| e.replace('+', " ")),
+    }.into_response()
 }
 
 pub async fn get_wallet(
@@ -222,38 +275,13 @@ pub async fn get_wallet(
         Err(_) => return Redirect::to("/login").into_response(),
     };
 
-    let orders = state.wallet_repo.order_history(&id).await.unwrap_or_default();
-    let asset_prices = state.asset_repo.list_all().await.unwrap_or_default();
+    let sim_profile = load_sim_profile(&state, &id).await;
 
     WalletPage {
         balance_display: cents_to_display(wallet.balance_cents),
-        positions: wallet.positions.values().map(|p| {
-            let price_cents = asset_prices.iter()
-                .find(|a| a.asset_type == p.asset_type)
-                .map(|a| a.price_cents)
-                .unwrap_or(0);
-            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
-            PositionView {
-                symbol: p.asset_type.symbol().to_string(),
-                quantity: p.quantity,
-                price_cents,
-                price_display: cents_to_display(price_cents),
-                total_display: total_to_display(price_cents, p.quantity),
-                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
-                pnl_display,
-                pnl_pct,
-                pnl_positive,
-            }
-        }).collect(),
-        orders: orders.iter().map(|o| OrderView {
-            is_buy: o.order_type == OrderType::Buy,
-            symbol: o.asset.symbol().to_string(),
-            quantity: o.quantity,
-            unit_price_display: cents_to_display(o.price_cents),
-            total_display: total_to_display(o.price_cents, o.quantity),
-        }).collect(),
         message: params.get("msg").cloned(),
         error: params.get("err").map(|e| e.replace('+', " ")),
+        sim_profile,
     }.into_response()
 }
 
@@ -283,17 +311,17 @@ pub async fn post_buy(
 
     let quantity = match parse_quantity(&form.quantity) {
         Ok(q) => q,
-        Err(e) => return wallet_page_with_error(&state, &id, e).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response(),
     };
 
     let asset = match state.asset_repo.find_price(&form.symbol).await {
         Ok(a) => a,
-        Err(e) => return wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
     };
 
     let mut wallet = match state.wallet_repo.find(&id).await {
         Ok(w) => w,
-        Err(e) => return wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
     };
 
     match wallet.buy(&asset.asset_type, quantity, asset.price_cents) {
@@ -303,11 +331,11 @@ pub async fn post_buy(
             );
             let _ = state.wallet_repo.save(&wallet).await;
             let _ = state.wallet_repo.record_order(&order).await;
-            Redirect::to("/wallet?msg=purchase+successful").into_response()
+            Redirect::to("/assets?msg=purchase+completed").into_response()
         }
         Err(e) => {
             let msg = e.to_string().replace(' ', "+");
-            Redirect::to(&format!("/wallet?err={}", msg)).into_response()
+            Redirect::to(&format!("/assets?err={}", msg)).into_response()
         }
     }
 }
@@ -323,17 +351,17 @@ pub async fn post_sell(
 
     let quantity = match parse_quantity(&form.quantity) {
         Ok(q) => q,
-        Err(e) => return wallet_page_with_error(&state, &id, e).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response(),
     };
 
     let asset = match state.asset_repo.find_price(&form.symbol).await {
         Ok(a) => a,
-        Err(e) => return wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
     };
 
     let mut wallet = match state.wallet_repo.find(&id).await {
         Ok(w) => w,
-        Err(e) => return wallet_page_with_error(&state, &id, e.to_string()).await,
+        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
     };
 
     match wallet.sell(&asset.asset_type, quantity, asset.price_cents) {
@@ -343,17 +371,62 @@ pub async fn post_sell(
             );
             let _ = state.wallet_repo.save(&wallet).await;
             let _ = state.wallet_repo.record_order(&order).await;
-            Redirect::to("/wallet?msg=sale+successful").into_response()
+            Redirect::to("/assets?msg=sale+completed").into_response()
         }
         Err(e) => {
             let msg = e.to_string().replace(' ', "+");
-            Redirect::to(&format!("/wallet?err={}", msg)).into_response()
+            Redirect::to(&format!("/assets?err={}", msg)).into_response()
         }
     }
 }
 
-pub async fn get_logout() -> Response {
-    let clear = format!("{}=; HttpOnly; Path=/; Max-Age=0", JWT_COOKIE);
+#[derive(Deserialize)]
+pub struct SimulateForm {
+    pub profile: String,
+}
+
+pub async fn post_simulate(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Form(form): Form<SimulateForm>,
+) -> Response {
+    let Some(id) = get_user_id(&headers, &state.jwt_secret) else {
+        return Redirect::to("/login").into_response();
+    };
+
+    let kind = ProfileKind::from_str(&form.profile);
+    let (profile, investment, _seed) = generate_for_kind(kind);
+
+    let _ = state.profile_repo.upsert_profile(&id, &profile).await;
+    if let Ok(mut wallet) = state.wallet_repo.find(&id).await {
+        wallet.balance_cents = investment;
+        let _ = state.wallet_repo.save(&wallet).await;
+    }
+
+    Redirect::to("/wallet?msg=simulation+started").into_response()
+}
+
+async fn load_sim_profile(
+    state: &Arc<AppState>,
+    id: &core_business::UserId,
+) -> Option<SimProfileSummary> {
+    let profile = state.profile_repo.find_only(id).await.ok()??;
+    let wallet = state.wallet_repo.find(id).await.ok()?;
+    let invested = wallet.balance_cents.max(1);
+
+    Some(SimProfileSummary {
+        income: fmt_brl(profile.monthly_income_cents),
+        expenses: vec![
+            SimExpenseView { label: "Card bill".into(),         amount: fmt_brl(profile.card_bill_cents) },
+            SimExpenseView { label: "Pending bills (15d)".into(), amount: fmt_brl(profile.pending_bills_cents) },
+            SimExpenseView { label: "Variable expenses".into(),  amount: fmt_brl(profile.estimated_variable_spend_cents) },
+            SimExpenseView { label: "Savings goal".into(),       amount: fmt_brl(profile.monthly_savings_goal_cents) },
+            SimExpenseView { label: "Invested".into(),           amount: fmt_brl(invested) },
+        ],
+    })
+}
+
+pub async fn get_logout() -> Response {    let clear = format!("{}=; HttpOnly; Path=/; Max-Age=0", JWT_COOKIE);
     let mut response = Redirect::to("/login").into_response();
     response.headers_mut().insert(
         axum::http::header::SET_COOKIE,
@@ -362,43 +435,4 @@ pub async fn get_logout() -> Response {
     response
 }
 
-async fn wallet_page_with_error(
-    state: &Arc<AppState>,
-    id: &core_business::UserId,
-    error: String,
-) -> Response {
-    let wallet = state.wallet_repo.find(id).await.ok();
-    let orders = state.wallet_repo.order_history(id).await.unwrap_or_default();
-    let asset_prices = state.asset_repo.list_all().await.unwrap_or_default();
 
-    WalletPage {
-        balance_display: cents_to_display(wallet.as_ref().map(|w| w.balance_cents).unwrap_or(0)),
-        positions: wallet.map(|w| w.positions.values().map(|p| {
-            let price_cents = asset_prices.iter()
-                .find(|a| a.asset_type == p.asset_type)
-                .map(|a| a.price_cents)
-                .unwrap_or(0);
-            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
-            PositionView {
-                symbol: p.asset_type.symbol().to_string(),
-                quantity: p.quantity,
-                price_cents,
-                price_display: cents_to_display(price_cents),
-                total_display: total_to_display(price_cents, p.quantity),
-                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
-                pnl_display,
-                pnl_pct,
-                pnl_positive,
-            }
-        }).collect()).unwrap_or_default(),
-        orders: orders.iter().map(|o| OrderView {
-            is_buy: o.order_type == OrderType::Buy,
-            symbol: o.asset.symbol().to_string(),
-            quantity: o.quantity,
-            unit_price_display: cents_to_display(o.price_cents),
-            total_display: total_to_display(o.price_cents, o.quantity),
-        }).collect(),
-        message: None,
-        error: Some(error),
-    }.into_response()
-}
