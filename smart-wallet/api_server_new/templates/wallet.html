@@ -42,8 +42,10 @@
       <tr style="border-bottom:1px solid #2d3148;">
         <th style="text-align:left;padding:0.75rem;color:#94a3b8;font-weight:500;">Asset</th>
         <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Quantity</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Avg Cost</th>
         <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Unit Price</th>
         <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">Value</th>
+        <th style="text-align:right;padding:0.75rem;color:#94a3b8;font-weight:500;">P&L</th>
         <th style="text-align:center;padding:0.75rem;color:#94a3b8;font-weight:500;">Action</th>
       </tr>
     </thead>
@@ -52,8 +54,13 @@
       <tr style="border-bottom:1px solid #1e2133;">
         <td style="padding:0.85rem;font-weight:600;">{{ pos.symbol }}</td>
         <td style="padding:0.85rem;text-align:right;font-family:monospace;">{{ pos.quantity }}</td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#94a3b8;">R$ {{ pos.avg_cost_display }}</td>
         <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#4ade80;">R$ <span id="pos-price-{{ pos.symbol }}">{{ pos.price_display }}</span></td>
-        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ <span id="pos-total-{{ pos.symbol }}" data-qty="{{ pos.quantity }}">{{ pos.total_display }}</span></td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;">R$ <span id="pos-total-{{ pos.symbol }}" data-qty="{{ pos.quantity }}" data-avg-cost="{{ pos.avg_cost_display }}">{{ pos.total_display }}</span></td>
+        <td style="padding:0.85rem;text-align:right;font-family:monospace;font-weight:600;">
+          <span id="pos-pnl-{{ pos.symbol }}" style="color:{% if pos.pnl_positive %}#4ade80{% else %}#f87171{% endif %};">{{ pos.pnl_display }}</span>
+          <span id="pos-pnl-pct-{{ pos.symbol }}" style="display:block;font-size:0.78rem;color:{% if pos.pnl_positive %}#4ade80{% else %}#f87171{% endif %};">{{ pos.pnl_pct }}</span>
+        </td>
         <td style="padding:0.85rem;text-align:center;">
           <button
             class="btn btn-danger"
@@ -71,42 +78,83 @@
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
   <div class="card">
     <h2>Buy Asset</h2>
-    <form method="POST" action="/wallet/buy">
-      <div class="form-group">
-        <label>Symbol</label>
-        <select name="symbol">
-          <option value="BTC">BTC — Bitcoin</option>
-          <option value="ETH">ETH — Ethereum</option>
-          <option value="SOL">SOL — Solana</option>
-          <option value="USD">USD — Dollar</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Quantity</label>
-        <input type="number" name="quantity" step="0.001" min="0.001" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
-      </div>
-      <button type="submit">Buy</button>
-    </form>
+    <div class="form-group">
+      <label>Symbol</label>
+      <select id="buy-select">
+        <option value="BTC" data-name="Bitcoin">BTC — Bitcoin</option>
+        <option value="ETH" data-name="Ethereum">ETH — Ethereum</option>
+        <option value="SOL" data-name="Solana">SOL — Solana</option>
+        <option value="USD" data-name="Dollar">USD — Dollar</option>
+      </select>
+    </div>
+    <button onclick="openBuyModalFromWallet()">Buy</button>
   </div>
 
   <div class="card">
     <h2>Sell Asset</h2>
-    <form method="POST" action="/wallet/sell">
+    <div class="form-group">
+      <label>Symbol</label>
+      <select id="sell-select">
+        <option value="BTC">BTC — Bitcoin</option>
+        <option value="ETH">ETH — Ethereum</option>
+        <option value="SOL">SOL — Solana</option>
+        <option value="USD">USD — Dollar</option>
+      </select>
+    </div>
+    <button class="btn-danger" onclick="openSellModalFromWallet()">Sell</button>
+  </div>
+</div>
+
+<!-- Buy Modal -->
+<div id="buy-modal" role="dialog" aria-modal="true" aria-labelledby="buy-modal-title"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:2rem;width:100%;max-width:420px;margin:1rem;">
+    <h3 id="buy-modal-title" style="margin-bottom:1.5rem;font-size:1.1rem;">
+      Buy <span id="buy-modal-asset-name"></span>
+    </h3>
+    <div style="background:#0f1117;border-radius:8px;padding:1rem;margin-bottom:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+      <span style="color:#94a3b8;font-size:0.85rem;">Symbol</span>
+      <span id="buy-modal-symbol" style="text-align:right;font-weight:700;color:#7c83ff;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Unit price</span>
+      <span id="buy-modal-price" style="text-align:right;font-family:monospace;color:#4ade80;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Total cost</span>
+      <span id="buy-modal-total" style="text-align:right;font-family:monospace;color:#e2e8f0;font-weight:600;"></span>
+    </div>
+    <form method="POST" action="/wallet/buy">
+      <input type="hidden" name="symbol" id="buy-modal-input-symbol"/>
       <div class="form-group">
-        <label>Symbol</label>
-        <select name="symbol">
-          <option value="BTC">BTC — Bitcoin</option>
-          <option value="ETH">ETH — Ethereum</option>
-          <option value="SOL">SOL — Solana</option>
-          <option value="USD">USD — Dollar</option>
-        </select>
+        <label for="buy-modal-qty">Quantity</label>
+        <input type="number" id="buy-modal-qty" name="quantity" step="0.001" min="0.001" value="1" required
+          oninput="sanitizeBuyQty(this); updateBuyTotal()"/>
       </div>
-      <div class="form-group">
-        <label>Quantity</label>
-        <input type="number" name="quantity" step="0.001" min="0.001" value="1" required oninput="if(parseFloat(this.value)<=0||isNaN(parseFloat(this.value)))this.value=0.001"/>
+      <div style="display:flex;gap:0.75rem;margin-top:0.5rem;">
+        <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeBuyModal()">Cancel</button>
+        <button type="button" style="flex:2;" onclick="openBuyConfirmStep()">Review Order</button>
       </div>
-      <button type="submit" class="btn-danger">Sell</button>
     </form>
+  </div>
+</div>
+
+<!-- Buy Confirm Step -->
+<div id="buy-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="buy-confirm-title"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #4ade80;border-radius:12px;padding:2rem;width:100%;max-width:400px;margin:1rem;">
+    <div style="text-align:center;font-size:2rem;margin-bottom:0.5rem;">🛒</div>
+    <h3 id="buy-confirm-title" style="text-align:center;margin-bottom:1.5rem;font-size:1.05rem;color:#e2e8f0;">Confirm Purchase</h3>
+    <div style="background:#0f1117;border-radius:8px;padding:1rem;margin-bottom:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+      <span style="color:#94a3b8;font-size:0.85rem;">Asset</span>
+      <span id="buy-confirm-symbol" style="text-align:right;font-weight:700;color:#7c83ff;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Quantity</span>
+      <span id="buy-confirm-qty" style="text-align:right;font-family:monospace;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Unit price</span>
+      <span id="buy-confirm-unit" style="text-align:right;font-family:monospace;color:#4ade80;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;font-weight:600;">Total</span>
+      <span id="buy-confirm-total" style="text-align:right;font-family:monospace;font-weight:700;color:#e2e8f0;font-size:1.05rem;"></span>
+    </div>
+    <div style="display:flex;gap:0.75rem;">
+      <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeBuyConfirmModal()">← Back</button>
+      <button type="button" style="flex:2;background:#4ade80;color:#0f1117;font-weight:700;" onclick="submitBuy()">✓ Buy Now</button>
+    </div>
   </div>
 </div>
 
@@ -144,6 +192,31 @@
     </tbody>
   </table>
   {% endif %}
+</div>
+
+<!-- Sell Confirm Step -->
+<div id="sell-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="sell-confirm-title"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#1a1d27;border:1px solid #e05c6c;border-radius:12px;padding:2rem;width:100%;max-width:400px;margin:1rem;">
+    <div style="text-align:center;font-size:2rem;margin-bottom:0.5rem;">⚠️</div>
+    <h3 id="sell-confirm-title" style="text-align:center;margin-bottom:1.5rem;font-size:1.05rem;color:#e2e8f0;">Confirm Sale</h3>
+
+    <div style="background:#0f1117;border-radius:8px;padding:1rem;margin-bottom:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;">
+      <span style="color:#94a3b8;font-size:0.85rem;">Asset</span>
+      <span id="sell-confirm-symbol" style="text-align:right;font-weight:700;color:#e05c6c;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Quantity</span>
+      <span id="sell-confirm-qty" style="text-align:right;font-family:monospace;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;">Unit price</span>
+      <span id="sell-confirm-unit" style="text-align:right;font-family:monospace;color:#4ade80;"></span>
+      <span style="color:#94a3b8;font-size:0.85rem;font-weight:600;">Total to receive</span>
+      <span id="sell-confirm-total" style="text-align:right;font-family:monospace;font-weight:700;color:#e2e8f0;font-size:1.05rem;"></span>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;">
+      <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeSellConfirmModal()">← Back</button>
+      <button type="button" class="btn-danger" style="flex:2;font-weight:700;" onclick="submitSell()">✓ Sell Now</button>
+    </div>
+  </div>
 </div>
 
 <!-- Sell Modal -->
@@ -186,7 +259,7 @@
       </div>
       <div style="display:flex;gap:0.75rem;margin-top:0.5rem;">
         <button type="button" class="btn-secondary btn" style="flex:1;" onclick="closeSellModal()">Cancel</button>
-        <button type="submit" class="btn-danger" style="flex:2;">Confirm Sale</button>
+        <button type="button" class="btn-danger" style="flex:2;" onclick="openSellConfirmStep()">Review Order</button>
       </div>
     </form>
   </div>
@@ -196,6 +269,79 @@
   var _sellPriceCents = 0;
   var _sellAvailable = 0;
   var _sellStep = 0.001;
+  var _buyPriceCents = 0;
+
+  // ── Buy modal (wallet page) ───────────────────────────────────────────────
+  function openBuyModalFromWallet() {
+    var sel = document.getElementById('buy-select');
+    var symbol = sel.value;
+    var name = sel.options[sel.selectedIndex].getAttribute('data-name');
+    var price = _livePrices[symbol];
+    if (!price) { alert('Price not available yet, please wait a moment.'); return; }
+    _buyPriceCents = price;
+    document.getElementById('buy-modal-asset-name').textContent = name;
+    document.getElementById('buy-modal-symbol').textContent = symbol;
+    document.getElementById('buy-modal-price').textContent = 'R$ ' + centsToDisplay(price);
+    document.getElementById('buy-modal-input-symbol').value = symbol;
+    document.getElementById('buy-modal-qty').value = 1;
+    updateBuyTotal();
+    document.getElementById('buy-modal').style.display = 'flex';
+    document.getElementById('buy-modal-qty').focus();
+  }
+
+  function closeBuyModal() {
+    document.getElementById('buy-modal').style.display = 'none';
+  }
+
+  function sanitizeBuyQty(input) {
+    var v = parseFloat(input.value.replace(',', '.'));
+    if (isNaN(v) || v <= 0) input.value = 0.001;
+  }
+
+  function updateBuyTotal() {
+    var qty = parseFloat(document.getElementById('buy-modal-qty').value) || 0;
+    document.getElementById('buy-modal-total').textContent = 'R$ ' + centsToDisplay(Math.round(_buyPriceCents * qty));
+  }
+
+  function openBuyConfirmStep() {
+    var qty = parseFloat(document.getElementById('buy-modal-qty').value) || 0;
+    if (qty <= 0) return;
+    document.getElementById('buy-confirm-symbol').textContent = document.getElementById('buy-modal-symbol').textContent;
+    document.getElementById('buy-confirm-qty').textContent = qty;
+    document.getElementById('buy-confirm-unit').textContent = document.getElementById('buy-modal-price').textContent;
+    document.getElementById('buy-confirm-total').textContent = document.getElementById('buy-modal-total').textContent;
+    document.getElementById('buy-confirm-modal').style.display = 'flex';
+  }
+
+  function closeBuyConfirmModal() {
+    document.getElementById('buy-confirm-modal').style.display = 'none';
+  }
+
+  function submitBuy() {
+    document.getElementById('buy-confirm-modal').style.display = 'none';
+    document.querySelector('#buy-modal form').submit();
+  }
+
+  document.getElementById('buy-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeBuyModal();
+  });
+  document.getElementById('buy-confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeBuyConfirmModal();
+  });
+
+  // ── Sell modal ────────────────────────────────────────────────────────────
+
+  function openSellModalFromWallet() {
+    var sel = document.getElementById('sell-select');
+    var symbol = sel.value;
+    var price = _livePrices[symbol];
+    if (!price) { alert('Price not available yet, please wait a moment.'); return; }
+    // try to read available qty from positions table
+    var totalEl = document.getElementById('pos-total-' + symbol);
+    var available = totalEl ? parseFloat(totalEl.getAttribute('data-qty') || '0') : 0;
+    if (available <= 0) available = 0.001;
+    openSellModal(symbol, available, centsToDisplay(price), price);
+  }
 
   function openSellModal(symbol, available, priceDisplay, priceCents) {
     _sellPriceCents = Number(priceCents);
@@ -216,6 +362,28 @@
 
   function closeSellModal() {
     document.getElementById('sell-modal').style.display = 'none';
+  }
+
+  function openSellConfirmStep() {
+    var qty = parseFloat(String(document.getElementById('sell-modal-qty').value).replace(',', '.')) || 0;
+    if (qty <= 0) return;
+    var symbol = document.getElementById('sell-modal-symbol').textContent;
+    var unitDisplay = document.getElementById('sell-modal-price').textContent;
+    var totalDisplay = document.getElementById('sell-modal-total').textContent;
+    document.getElementById('sell-confirm-symbol').textContent = symbol;
+    document.getElementById('sell-confirm-qty').textContent = qty;
+    document.getElementById('sell-confirm-unit').textContent = unitDisplay;
+    document.getElementById('sell-confirm-total').textContent = totalDisplay;
+    document.getElementById('sell-confirm-modal').style.display = 'flex';
+  }
+
+  function closeSellConfirmModal() {
+    document.getElementById('sell-confirm-modal').style.display = 'none';
+  }
+
+  function submitSell() {
+    document.getElementById('sell-confirm-modal').style.display = 'none';
+    document.querySelector('#sell-modal form').submit();
   }
 
   function sanitizeSellQty(input) {
@@ -240,6 +408,10 @@
     document.getElementById('sell-modal-qty').value = v;
     updateSellTotal();
   }
+
+  document.getElementById('sell-confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeSellConfirmModal();
+  });
 
   document.getElementById('sell-modal').addEventListener('click', function(e) {
     if (e.target === this) closeSellModal();
@@ -276,11 +448,34 @@
           var priceEl = document.getElementById('pos-price-' + symbol);
           if (priceEl) priceEl.textContent = centsToDisplay(asset.price_cents);
 
-          // update position total using current quantity from data attribute
+          // update position total and P&L
           var totalEl = document.getElementById('pos-total-' + symbol);
           if (totalEl) {
             var qty = parseFloat(totalEl.getAttribute('data-qty') || '0');
-            totalEl.textContent = centsToDisplay(Math.round(asset.price_cents * qty));
+            var avgCostStr = (totalEl.getAttribute('data-avg-cost') || '0').replace('.', '').replace(',', '.');
+            var avgCostCents = parseFloat(avgCostStr) * 100;
+            var currentTotal = Math.round(asset.price_cents * qty);
+            totalEl.textContent = centsToDisplay(currentTotal);
+
+            // P&L
+            var costTotal = avgCostCents * qty;
+            var diff = asset.price_cents * qty - costTotal;
+            var positive = diff >= 0;
+            var absDiff = Math.round(Math.abs(diff));
+            var pct = costTotal > 0 ? (diff / costTotal * 100) : 0;
+            var sign = positive ? '+' : '-';
+            var color = positive ? '#4ade80' : '#f87171';
+
+            var pnlEl = document.getElementById('pos-pnl-' + symbol);
+            if (pnlEl) {
+              pnlEl.textContent = sign + 'R$ ' + centsToDisplay(absDiff);
+              pnlEl.style.color = color;
+            }
+            var pnlPctEl = document.getElementById('pos-pnl-pct-' + symbol);
+            if (pnlPctEl) {
+              pnlPctEl.textContent = sign + Math.abs(pct).toFixed(2) + '%';
+              pnlPctEl.style.color = color;
+            }
           }
         });
       })
@@ -291,6 +486,9 @@
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
+      closeBuyConfirmModal();
+      closeBuyModal();
+      closeSellConfirmModal();
       closeSellModal();
     }
     var qty = document.getElementById('sell-modal-qty');
