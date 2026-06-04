@@ -3,8 +3,11 @@
 use sqlx::PgPool;
 use chrono::Utc;
 use uuid::Uuid;
+use async_trait::async_trait;
 
-use core_business::{BusinessError, UserId, FinancialProfile};
+use core_business::{BusinessError, UserId, FinancialProfile, FinancialProfileRepository};
+
+// ── Postgres implementation ──────────────────────────────────────────────────
 
 pub struct FinancialProfileRepositoryPg {
     pool: PgPool,
@@ -15,9 +18,41 @@ impl FinancialProfileRepositoryPg {
         Self { pool }
     }
 
-    /// Returns the stored profile or generates a fresh synthetic one.
-    /// Regenerates if the profile is older than 30 days.
-    pub async fn get_or_generate(&self, user_id: &UserId) -> Result<FinancialProfile, BusinessError> {
+    async fn upsert(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
+        sqlx::query(
+            r#"INSERT INTO financial_profiles
+               (user_id, card_bill_cents, card_bill_days, pending_bills_cents,
+                estimated_variable_spend_cents, monthly_savings_goal_cents,
+                days_until_salary, monthly_income_cents, generated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+               ON CONFLICT (user_id) DO UPDATE SET
+                 card_bill_cents                = EXCLUDED.card_bill_cents,
+                 card_bill_days                 = EXCLUDED.card_bill_days,
+                 pending_bills_cents            = EXCLUDED.pending_bills_cents,
+                 estimated_variable_spend_cents = EXCLUDED.estimated_variable_spend_cents,
+                 monthly_savings_goal_cents     = EXCLUDED.monthly_savings_goal_cents,
+                 days_until_salary              = EXCLUDED.days_until_salary,
+                 monthly_income_cents           = EXCLUDED.monthly_income_cents,
+                 generated_at                   = NOW()"#,
+        )
+        .bind(user_id.0)
+        .bind(p.card_bill_cents as i64)
+        .bind(p.card_bill_days as i16)
+        .bind(p.pending_bills_cents as i64)
+        .bind(p.estimated_variable_spend_cents as i64)
+        .bind(p.monthly_savings_goal_cents as i64)
+        .bind(p.days_until_salary as i16)
+        .bind(p.monthly_income_cents as i64)
+        .execute(&self.pool)
+        .await
+        .map_err(|_| BusinessError::UserNotFound)?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl FinancialProfileRepository for FinancialProfileRepositoryPg {
+    async fn get_or_generate(&self, user_id: &UserId) -> Result<FinancialProfile, BusinessError> {
         #[derive(sqlx::FromRow)]
         struct Row {
             card_bill_cents:                i64,
@@ -56,15 +91,13 @@ impl FinancialProfileRepositoryPg {
             }
         }
 
-        // Generate a new synthetic profile seeded from the user UUID bytes
-        // so different users get different — but deterministic — profiles.
         let seed = seed_from_uuid(user_id.0);
         let profile = generate_synthetic(seed);
         self.upsert(user_id, &profile).await?;
         Ok(profile)
     }
 
-    pub async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError> {
+    async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError> {
         #[derive(sqlx::FromRow)]
         struct Row {
             card_bill_cents:                i64,
@@ -97,50 +130,18 @@ impl FinancialProfileRepositoryPg {
         }))
     }
 
-    pub async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
+    async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
         self.upsert(user_id, p).await
-    }
-
-    async fn upsert(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
-        sqlx::query(
-            r#"INSERT INTO financial_profiles
-               (user_id, card_bill_cents, card_bill_days, pending_bills_cents,
-                estimated_variable_spend_cents, monthly_savings_goal_cents,
-                days_until_salary, monthly_income_cents, generated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-               ON CONFLICT (user_id) DO UPDATE SET
-                 card_bill_cents                = EXCLUDED.card_bill_cents,
-                 card_bill_days                 = EXCLUDED.card_bill_days,
-                 pending_bills_cents            = EXCLUDED.pending_bills_cents,
-                 estimated_variable_spend_cents = EXCLUDED.estimated_variable_spend_cents,
-                 monthly_savings_goal_cents     = EXCLUDED.monthly_savings_goal_cents,
-                 days_until_salary              = EXCLUDED.days_until_salary,
-                 monthly_income_cents           = EXCLUDED.monthly_income_cents,
-                 generated_at                   = NOW()"#,
-        )
-        .bind(user_id.0)
-        .bind(p.card_bill_cents as i64)
-        .bind(p.card_bill_days as i16)
-        .bind(p.pending_bills_cents as i64)
-        .bind(p.estimated_variable_spend_cents as i64)
-        .bind(p.monthly_savings_goal_cents as i64)
-        .bind(p.days_until_salary as i16)
-        .bind(p.monthly_income_cents as i64)
-        .execute(&self.pool)
-        .await
-        .map_err(|_| BusinessError::UserNotFound)?;
-        Ok(())
     }
 }
 
 // ── Synthetic generation ─────────────────────────────────────────────────────
 
-/// Profile kind selected by the user on the simulator.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProfileKind {
-    Student,         // R$ 1.500 income, low costs
-    YoungProfessional, // R$ 4.000 income, medium costs
-    Family,          // R$ 8.000 income, high costs
+    Student,
+    YoungProfessional,
+    Family,
 }
 
 impl ProfileKind {
@@ -154,21 +155,20 @@ impl ProfileKind {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Student           => "Estudante",
-            Self::YoungProfessional => "Jovem Profissional",
-            Self::Family            => "Família",
+            Self::Student           => "Student",
+            Self::YoungProfessional => "Young Professional",
+            Self::Family            => "Family",
         }
     }
 
     pub fn income_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (120_000, 180_000),  // R$ 1.200 – 1.800
-            Self::YoungProfessional => (350_000, 500_000),  // R$ 3.500 – 5.000
-            Self::Family            => (700_000, 950_000),  // R$ 7.000 – 9.500
+            Self::Student           => (120_000, 180_000),
+            Self::YoungProfessional => (350_000, 500_000),
+            Self::Family            => (700_000, 950_000),
         }
     }
 
-    /// Card bill as % range of income.
     fn card_pct_range(&self) -> (u64, u64) {
         match self {
             Self::Student           => (15, 35),
@@ -177,16 +177,14 @@ impl ProfileKind {
         }
     }
 
-    /// Pending boletos range (cents).
     fn boleto_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (10_000,  40_000),  // R$ 100 – 400
-            Self::YoungProfessional => (30_000, 120_000),  // R$ 300 – 1.200
-            Self::Family            => (80_000, 250_000),  // R$ 800 – 2.500
+            Self::Student           => (10_000,  40_000),
+            Self::YoungProfessional => (30_000, 120_000),
+            Self::Family            => (80_000, 250_000),
         }
     }
 
-    /// Variable spend range (cents).
     fn variable_range(&self) -> (u64, u64) {
         match self {
             Self::Student           => (8_000,  25_000),
@@ -195,7 +193,6 @@ impl ProfileKind {
         }
     }
 
-    /// Savings goal as % range of income.
     fn savings_pct_range(&self) -> (u64, u64) {
         match self {
             Self::Student           => (5, 10),
@@ -204,7 +201,6 @@ impl ProfileKind {
         }
     }
 
-    /// Investment reserved range (cents) — already separated from expenses.
     pub fn investment_range(&self) -> (u64, u64) {
         match self {
             Self::Student           => (5_000,  30_000),
@@ -214,28 +210,21 @@ impl ProfileKind {
     }
 }
 
-/// Extracts a u64 seed from the first 8 bytes of a UUID.
 fn seed_from_uuid(id: Uuid) -> u64 {
     let b = id.as_bytes();
     u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
 }
 
-/// Minimal LCG pseudo-random generator (no external crate needed).
 fn lcg_next(state: &mut u64) -> u64 {
     *state = state.wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     *state >> 33
 }
 
-/// Returns a value in [lo, hi] using the LCG state.
 fn rand_range(state: &mut u64, lo: u64, hi: u64) -> u64 {
     lo + lcg_next(state) % (hi - lo + 1)
 }
 
-/// Generates a synthetic profile constrained to the given `ProfileKind` ranges.
-/// Uses a fresh time-based seed so each click produces new numbers.
-/// Returns `(profile, simulated_bank_balance_cents, seed)` — seed can be
-/// passed back via URL to reproduce the exact same profile on re-renders.
 pub fn generate_for_kind(kind: ProfileKind) -> (FinancialProfile, u64, u64) {
     let seed = chrono::Utc::now().timestamp_millis() as u64;
     let mut s = seed;
@@ -245,7 +234,6 @@ pub fn generate_for_kind(kind: ProfileKind) -> (FinancialProfile, u64, u64) {
     (profile, investment, seed)
 }
 
-/// Reproduces a previously generated profile using the stored seed.
 pub fn reproduce_for_kind(kind: ProfileKind, seed: u64) -> (FinancialProfile, u64) {
     let mut s = seed;
     let profile = generate_synthetic_ranged(seed, kind);
@@ -254,13 +242,11 @@ pub fn reproduce_for_kind(kind: ProfileKind, seed: u64) -> (FinancialProfile, u6
     (profile, investment)
 }
 
-/// Generates a realistic synthetic financial profile for a Brazilian user
-/// using the user UUID as a stable seed (deterministic per user).
 fn generate_synthetic(seed: u64) -> FinancialProfile {
     generate_synthetic_ranged(seed, ProfileKind::YoungProfessional)
 }
 
-fn generate_synthetic_ranged(seed: u64, kind: ProfileKind) -> FinancialProfile {
+pub fn generate_synthetic_ranged(seed: u64, kind: ProfileKind) -> FinancialProfile {
     let mut s = seed;
 
     let (inc_lo, inc_hi) = kind.income_range();
@@ -284,8 +270,6 @@ fn generate_synthetic_ranged(seed: u64, kind: ProfileKind) -> FinancialProfile {
 
     let days_until_salary = rand_range(&mut s, 1, 30) as u8;
 
-    // Garante que a soma das despesas não ultrapasse 90% do salário.
-    // Se ultrapassar, escala proporcionalmente mantendo as relações entre elas.
     let total_expenses = card_bill_cents + pending_bills_cents
         + estimated_variable_spend_cents + monthly_savings_goal_cents;
     let budget = monthly_income_cents * 90 / 100;
