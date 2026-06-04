@@ -4,6 +4,7 @@ pub mod auth;
 pub mod wallet;
 pub mod assets;
 pub mod pages;
+pub mod saldo_real;
 
 use std::sync::Arc;
 use axum::{Router, routing::{get, post}};
@@ -31,6 +32,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/wallet/buy",      post(wallet::buy))
         .route("/api/wallet/sell",     post(wallet::sell))
         .route("/api/wallet/history",  get(wallet::history))
+        .route("/saldo-real",            get(saldo_real::get_saldo_real))
+        .route("/api/saldo-real",        get(saldo_real::api_analyze))
         // Global tracing middleware
         .layer(TraceLayer::new_for_http())
         .with_state(state)

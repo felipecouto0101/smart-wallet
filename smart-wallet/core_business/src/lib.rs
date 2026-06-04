@@ -10,3 +10,4 @@ pub use domain::user::{UserId, User};
 pub use domain::order::{Order, OrderType};
 pub use errors::BusinessError;
 pub use ports::{UserRepository, WalletRepository, AssetRepository, PriceProvider};
+pub use domain::financial_profile::{FinancialProfile, PurchaseAnalysis, WalletAlert, AlertLevel, analyze_purchase, proactive_alerts, fmt_brl};

@@ -11,7 +11,7 @@ use tokio::time::{interval, Duration};
 
 use infra_data::{
     connect,
-    repositories::{UserRepositoryPg, WalletRepositoryPg, AssetRepositoryPg},
+    repositories::{UserRepositoryPg, WalletRepositoryPg, AssetRepositoryPg, FinancialProfileRepositoryPg},
     LivePriceProvider,
     update_prices,
 };
@@ -57,9 +57,10 @@ async fn main() -> Result<()> {
     });
 
     let state = Arc::new(AppState {
-        user_repo:   Arc::new(UserRepositoryPg::new(pool.clone())),
-        wallet_repo: Arc::new(WalletRepositoryPg::new(pool.clone())),
-        asset_repo:  Arc::new(asset_repo),
+        user_repo:    Arc::new(UserRepositoryPg::new(pool.clone())),
+        wallet_repo:  Arc::new(WalletRepositoryPg::new(pool.clone())),
+        asset_repo:   Arc::new(asset_repo),
+        profile_repo: Arc::new(FinancialProfileRepositoryPg::new(pool.clone())),
         jwt_secret,
     });
 
