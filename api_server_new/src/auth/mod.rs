@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod middleware;
+
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};

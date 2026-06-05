@@ -132,6 +132,14 @@ async fn register_returns_409_on_duplicate() {
 // ── GET /api/assets ───────────────────────────────────────────────────────────
 
 #[tokio::test]
+async fn list_assets_returns_401_without_auth() {
+    let state = make_state(MockUserRepository::new(), MockWalletRepository::new(), MockAssetRepository::new(), MockFinancialProfileRepository::new());
+    let req = Request::builder().uri("/api/assets").body(Body::empty()).unwrap();
+    let (status, _) = send(create_router(state), req).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn list_assets_returns_200_with_assets() {
     let mut asset_repo = MockAssetRepository::new();
     asset_repo.expect_list_all().once().returning(|| {
@@ -144,7 +152,10 @@ async fn list_assets_returns_200_with_assets() {
     });
 
     let state = make_state(MockUserRepository::new(), MockWalletRepository::new(), asset_repo, MockFinancialProfileRepository::new());
-    let req = Request::builder().uri("/api/assets").body(Body::empty()).unwrap();
+    let req = Request::builder()
+        .uri("/api/assets")
+        .header("cookie", auth_cookie())
+        .body(Body::empty()).unwrap();
     let (status, body) = send(create_router(state), req).await;
 
     assert_eq!(status, StatusCode::OK);
