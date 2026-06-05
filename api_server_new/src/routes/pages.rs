@@ -464,7 +464,10 @@ pub async fn post_simulate(
         return Redirect::to("/login").into_response();
     };
 
-    let kind = form.profile.parse::<ProfileKind>().unwrap_or(ProfileKind::YoungProfessional);
+    let kind = form
+        .profile
+        .parse::<ProfileKind>()
+        .unwrap_or(ProfileKind::YoungProfessional);
     let (profile, investment, _seed) = generate_for_kind(kind);
 
     let _ = state.profile_repo.upsert_profile(&id, &profile).await;

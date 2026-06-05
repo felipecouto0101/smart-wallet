@@ -160,7 +160,6 @@ impl std::str::FromStr for ProfileKind {
 }
 
 impl ProfileKind {
-
     pub fn label(&self) -> &'static str {
         match self {
             Self::Student => "Student",
@@ -356,8 +355,14 @@ mod tests {
 
     #[test]
     fn profile_kind_from_str() {
-        assert_eq!("student".parse::<ProfileKind>().unwrap(), ProfileKind::Student);
-        assert_eq!("family".parse::<ProfileKind>().unwrap(), ProfileKind::Family);
+        assert_eq!(
+            "student".parse::<ProfileKind>().unwrap(),
+            ProfileKind::Student
+        );
+        assert_eq!(
+            "family".parse::<ProfileKind>().unwrap(),
+            ProfileKind::Family
+        );
         assert_eq!(
             "anything".parse::<ProfileKind>().unwrap(),
             ProfileKind::YoungProfessional
