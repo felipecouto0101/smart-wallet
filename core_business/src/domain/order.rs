@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use crate::domain::asset::AssetType;
 use crate::domain::user::UserId;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Newtype for order ID.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,7 +78,13 @@ mod tests {
     #[test]
     fn order_new_preserves_fields() {
         let uid = UserId::new();
-        let order = Order::new(uid.clone(), OrderType::Buy, AssetType::Bitcoin, 0.5, 35_000_000);
+        let order = Order::new(
+            uid.clone(),
+            OrderType::Buy,
+            AssetType::Bitcoin,
+            0.5,
+            35_000_000,
+        );
         assert_eq!(order.user_id, uid);
         assert_eq!(order.order_type, OrderType::Buy);
         assert_eq!(order.asset, AssetType::Bitcoin);
@@ -88,7 +94,13 @@ mod tests {
 
     #[test]
     fn sell_order_type_is_preserved() {
-        let order = Order::new(UserId::new(), OrderType::Sell, AssetType::Ethereum, 1.0, 10_000_000);
+        let order = Order::new(
+            UserId::new(),
+            OrderType::Sell,
+            AssetType::Ethereum,
+            1.0,
+            10_000_000,
+        );
         assert_eq!(order.order_type, OrderType::Sell);
         assert_eq!(order.asset, AssetType::Ethereum);
     }

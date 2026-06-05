@@ -210,7 +210,9 @@ pub fn analyze_purchase(
     };
 
     let headline = match level {
-        AlertLevel::Yellow => "⚠️ Rethink this Purchase — your Free Balance does not cover it.".into(),
+        AlertLevel::Yellow => {
+            "⚠️ Rethink this Purchase — your Free Balance does not cover it.".into()
+        }
         _ => "🔴 Risky Purchase — you will exceed your obligations.".into(),
     };
 
@@ -333,13 +335,13 @@ mod tests {
 
     fn profile() -> FinancialProfile {
         FinancialProfile {
-            card_bill_cents:               80_000,
-            card_bill_days:                4,
-            pending_bills_cents:           45_000,
+            card_bill_cents: 80_000,
+            card_bill_days: 4,
+            pending_bills_cents: 45_000,
             estimated_variable_spend_cents: 15_000,
-            monthly_savings_goal_cents:    30_000,
-            days_until_salary:             10,
-            monthly_income_cents:         500_000,
+            monthly_savings_goal_cents: 30_000,
+            days_until_salary: 10,
+            monthly_income_cents: 500_000,
         }
     }
 

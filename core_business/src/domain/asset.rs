@@ -22,20 +22,20 @@ impl AssetType {
     /// Returns the market symbol for this asset.
     pub fn symbol(&self) -> &'static str {
         match self {
-            AssetType::Bitcoin  => "BTC",
+            AssetType::Bitcoin => "BTC",
             AssetType::Ethereum => "ETH",
-            AssetType::Solana   => "SOL",
-            AssetType::Dollar   => "USD",
+            AssetType::Solana => "SOL",
+            AssetType::Dollar => "USD",
         }
     }
 
     /// Returns the full name of the asset.
     pub fn name(&self) -> &'static str {
         match self {
-            AssetType::Bitcoin  => "Bitcoin",
+            AssetType::Bitcoin => "Bitcoin",
             AssetType::Ethereum => "Ethereum",
-            AssetType::Solana   => "Solana",
-            AssetType::Dollar   => "US Dollar",
+            AssetType::Solana => "Solana",
+            AssetType::Dollar => "US Dollar",
         }
     }
 }
@@ -50,7 +50,10 @@ pub struct Asset {
 
 impl Asset {
     pub fn new(asset_type: AssetType, price_cents: u64) -> Self {
-        Self { asset_type, price_cents }
+        Self {
+            asset_type,
+            price_cents,
+        }
     }
 }
 

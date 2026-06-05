@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
 use askama::Template;
 use axum::{
     extract::{Query, State},
@@ -9,9 +8,13 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use std::sync::Arc;
 
-use core_business::{analyze_purchase, proactive_alerts, fmt_brl, AlertLevel, WalletAlert};
-use crate::{auth::{validate_token, JWT_COOKIE}, state::AppState};
+use crate::{
+    auth::{validate_token, JWT_COOKIE},
+    state::AppState,
+};
+use core_business::{analyze_purchase, fmt_brl, proactive_alerts, AlertLevel, WalletAlert};
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
 
@@ -102,7 +105,7 @@ pub async fn get_saldo_real(
     let (analysis, purchase_amount) = build_analysis(&profile, balance, &params.amount);
 
     let page = SaldoRealPage {
-        balance_display:  fmt_brl(balance),
+        balance_display: fmt_brl(balance),
         proactive_alerts: p_alerts.into_iter().map(alert_to_view).collect(),
         analysis,
         purchase_amount,
@@ -120,17 +123,33 @@ pub async fn api_analyze(
     use axum::http::StatusCode;
 
     let Some(id) = get_user_id(&headers, &state.jwt_secret) else {
-        return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({"error": "not authenticated"}))).into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "not authenticated"})),
+        )
+            .into_response();
     };
 
     let wallet = match state.wallet_repo.find(&id).await {
         Ok(w) => w,
-        Err(e) => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     };
 
     let profile = match state.profile_repo.get_or_generate(&id).await {
         Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     };
     let balance = wallet.balance_cents;
 
@@ -147,12 +166,16 @@ pub async fn api_analyze(
         })
     });
 
-    (StatusCode::OK, Json(serde_json::json!({
-        "balance_cents": balance,
-        "true_free_balance_cents": profile.true_free_balance(balance),
-        "proactive_alerts": p_alerts,
-        "analysis": analysis,
-    }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "balance_cents": balance,
+            "true_free_balance_cents": profile.true_free_balance(balance),
+            "proactive_alerts": p_alerts,
+            "analysis": analysis,
+        })),
+    )
+        .into_response()
 }
 
 // ── Shared analysis builder ───────────────────────────────────────────────────
@@ -162,30 +185,35 @@ fn build_analysis(
     balance: u64,
     amount_raw: &Option<String>,
 ) -> (Option<AnalysisView>, Option<String>) {
-    let Some(raw) = amount_raw else { return (None, None) };
+    let Some(raw) = amount_raw else {
+        return (None, None);
+    };
     let normalized = raw.trim().replace(',', ".");
-    let Ok(reais) = normalized.parse::<f64>() else { return (None, None) };
+    let Ok(reais) = normalized.parse::<f64>() else {
+        return (None, None);
+    };
 
-    let cents  = (reais * 100.0).round() as u64;
+    let cents = (reais * 100.0).round() as u64;
     let result = analyze_purchase(profile, balance, cents);
 
-    let is_green  = result.level == AlertLevel::Green;
+    let is_green = result.level == AlertLevel::Green;
     let is_yellow = result.level == AlertLevel::Yellow;
 
     let level_emoji = match result.level {
-        AlertLevel::Green  => "✅",
+        AlertLevel::Green => "✅",
         AlertLevel::Yellow => "⚠️",
-        AlertLevel::Red    => "🔴",
-    }.to_string();
+        AlertLevel::Red => "🔴",
+    }
+    .to_string();
 
     let free = result.true_free_balance_cents;
     let breakdown = BreakdownView {
-        monthly_income:     fmt_brl(result.breakdown.monthly_income_cents),
-        card_bill:         fmt_brl(result.breakdown.card_bill_cents),
-        card_bill_days:    result.breakdown.card_bill_days,
-        pending_bills:     fmt_brl(result.breakdown.pending_bills_cents),
-        variable_spend:    fmt_brl(result.breakdown.estimated_variable_spend_cents),
-        savings_goal:      fmt_brl(result.breakdown.monthly_savings_goal_cents),
+        monthly_income: fmt_brl(result.breakdown.monthly_income_cents),
+        card_bill: fmt_brl(result.breakdown.card_bill_cents),
+        card_bill_days: result.breakdown.card_bill_days,
+        pending_bills: fmt_brl(result.breakdown.pending_bills_cents),
+        variable_spend: fmt_brl(result.breakdown.estimated_variable_spend_cents),
+        savings_goal: fmt_brl(result.breakdown.monthly_savings_goal_cents),
         true_free_balance: if free >= 0 {
             fmt_brl(free.unsigned_abs())
         } else {
@@ -194,14 +222,15 @@ fn build_analysis(
         true_free_negative: free < 0,
     };
 
-    let installment_text = result.installment_suggestion
+    let installment_text = result
+        .installment_suggestion
         .map(|s| format!("{}x de R$ {}", s.installments, fmt_brl(s.installment_cents)));
 
     let view = AnalysisView {
         level_emoji,
-        headline:         result.headline,
-        detail_lines:     result.detail_lines,
-        suggestion:       result.suggestion,
+        headline: result.headline,
+        detail_lines: result.detail_lines,
+        suggestion: result.suggestion,
         installment_text,
         breakdown,
         is_green,
@@ -213,8 +242,8 @@ fn build_analysis(
 
 fn alert_to_view(a: WalletAlert) -> AlertView {
     AlertView {
-        is_green:  a.level == AlertLevel::Green,
+        is_green: a.level == AlertLevel::Green,
         is_yellow: a.level == AlertLevel::Yellow,
-        message:   a.message,
+        message: a.message,
     }
 }

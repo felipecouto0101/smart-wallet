@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
-use sqlx::PgPool;
-use chrono::Utc;
-use uuid::Uuid;
 use async_trait::async_trait;
+use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
 
-use core_business::{BusinessError, UserId, FinancialProfile, FinancialProfileRepository};
+use core_business::{BusinessError, FinancialProfile, FinancialProfileRepository, UserId};
 
 // ── Postgres implementation ──────────────────────────────────────────────────
 
@@ -55,14 +55,14 @@ impl FinancialProfileRepository for FinancialProfileRepositoryPg {
     async fn get_or_generate(&self, user_id: &UserId) -> Result<FinancialProfile, BusinessError> {
         #[derive(sqlx::FromRow)]
         struct Row {
-            card_bill_cents:                i64,
-            card_bill_days:                 i16,
-            pending_bills_cents:            i64,
+            card_bill_cents: i64,
+            card_bill_days: i16,
+            pending_bills_cents: i64,
             estimated_variable_spend_cents: i64,
-            monthly_savings_goal_cents:     i64,
-            days_until_salary:              i16,
-            monthly_income_cents:           i64,
-            generated_at:                   chrono::DateTime<Utc>,
+            monthly_savings_goal_cents: i64,
+            days_until_salary: i16,
+            monthly_income_cents: i64,
+            generated_at: chrono::DateTime<Utc>,
         }
 
         let existing: Option<Row> = sqlx::query_as(
@@ -80,13 +80,13 @@ impl FinancialProfileRepository for FinancialProfileRepositoryPg {
             let age_days = (Utc::now() - row.generated_at).num_days();
             if age_days < 30 {
                 return Ok(FinancialProfile {
-                    card_bill_cents:                row.card_bill_cents as u64,
-                    card_bill_days:                 row.card_bill_days as u8,
-                    pending_bills_cents:            row.pending_bills_cents as u64,
+                    card_bill_cents: row.card_bill_cents as u64,
+                    card_bill_days: row.card_bill_days as u8,
+                    pending_bills_cents: row.pending_bills_cents as u64,
                     estimated_variable_spend_cents: row.estimated_variable_spend_cents as u64,
-                    monthly_savings_goal_cents:     row.monthly_savings_goal_cents as u64,
-                    days_until_salary:              row.days_until_salary as u8,
-                    monthly_income_cents:           row.monthly_income_cents as u64,
+                    monthly_savings_goal_cents: row.monthly_savings_goal_cents as u64,
+                    days_until_salary: row.days_until_salary as u8,
+                    monthly_income_cents: row.monthly_income_cents as u64,
                 });
             }
         }
@@ -100,13 +100,13 @@ impl FinancialProfileRepository for FinancialProfileRepositoryPg {
     async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError> {
         #[derive(sqlx::FromRow)]
         struct Row {
-            card_bill_cents:                i64,
-            card_bill_days:                 i16,
-            pending_bills_cents:            i64,
+            card_bill_cents: i64,
+            card_bill_days: i16,
+            pending_bills_cents: i64,
             estimated_variable_spend_cents: i64,
-            monthly_savings_goal_cents:     i64,
-            days_until_salary:              i16,
-            monthly_income_cents:           i64,
+            monthly_savings_goal_cents: i64,
+            days_until_salary: i16,
+            monthly_income_cents: i64,
         }
         let row: Option<Row> = sqlx::query_as(
             r#"SELECT card_bill_cents, card_bill_days, pending_bills_cents,
@@ -120,17 +120,21 @@ impl FinancialProfileRepository for FinancialProfileRepositoryPg {
         .map_err(|_| BusinessError::UserNotFound)?;
 
         Ok(row.map(|r| FinancialProfile {
-            card_bill_cents:                r.card_bill_cents as u64,
-            card_bill_days:                 r.card_bill_days as u8,
-            pending_bills_cents:            r.pending_bills_cents as u64,
+            card_bill_cents: r.card_bill_cents as u64,
+            card_bill_days: r.card_bill_days as u8,
+            pending_bills_cents: r.pending_bills_cents as u64,
             estimated_variable_spend_cents: r.estimated_variable_spend_cents as u64,
-            monthly_savings_goal_cents:     r.monthly_savings_goal_cents as u64,
-            days_until_salary:              r.days_until_salary as u8,
-            monthly_income_cents:           r.monthly_income_cents as u64,
+            monthly_savings_goal_cents: r.monthly_savings_goal_cents as u64,
+            days_until_salary: r.days_until_salary as u8,
+            monthly_income_cents: r.monthly_income_cents as u64,
         }))
     }
 
-    async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError> {
+    async fn upsert_profile(
+        &self,
+        user_id: &UserId,
+        p: &FinancialProfile,
+    ) -> Result<(), BusinessError> {
         self.upsert(user_id, p).await
     }
 }
@@ -148,64 +152,64 @@ impl ProfileKind {
     pub fn from_str(s: &str) -> Self {
         match s {
             "student" => Self::Student,
-            "family"  => Self::Family,
-            _         => Self::YoungProfessional,
+            "family" => Self::Family,
+            _ => Self::YoungProfessional,
         }
     }
 
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Student           => "Student",
+            Self::Student => "Student",
             Self::YoungProfessional => "Young Professional",
-            Self::Family            => "Family",
+            Self::Family => "Family",
         }
     }
 
     pub fn income_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (120_000, 180_000),
+            Self::Student => (120_000, 180_000),
             Self::YoungProfessional => (350_000, 500_000),
-            Self::Family            => (700_000, 950_000),
+            Self::Family => (700_000, 950_000),
         }
     }
 
     fn card_pct_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (15, 35),
+            Self::Student => (15, 35),
             Self::YoungProfessional => (25, 55),
-            Self::Family            => (30, 60),
+            Self::Family => (30, 60),
         }
     }
 
     fn boleto_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (10_000,  40_000),
+            Self::Student => (10_000, 40_000),
             Self::YoungProfessional => (30_000, 120_000),
-            Self::Family            => (80_000, 250_000),
+            Self::Family => (80_000, 250_000),
         }
     }
 
     fn variable_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (8_000,  25_000),
-            Self::YoungProfessional => (20_000,  60_000),
-            Self::Family            => (50_000, 130_000),
+            Self::Student => (8_000, 25_000),
+            Self::YoungProfessional => (20_000, 60_000),
+            Self::Family => (50_000, 130_000),
         }
     }
 
     fn savings_pct_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (5, 10),
+            Self::Student => (5, 10),
             Self::YoungProfessional => (10, 20),
-            Self::Family            => (15, 25),
+            Self::Family => (15, 25),
         }
     }
 
     pub fn investment_range(&self) -> (u64, u64) {
         match self {
-            Self::Student           => (5_000,  30_000),
+            Self::Student => (5_000, 30_000),
             Self::YoungProfessional => (30_000, 150_000),
-            Self::Family            => (80_000, 400_000),
+            Self::Family => (80_000, 400_000),
         }
     }
 }
@@ -216,7 +220,8 @@ fn seed_from_uuid(id: Uuid) -> u64 {
 }
 
 fn lcg_next(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6_364_136_223_846_793_005)
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     *state >> 33
 }
@@ -270,17 +275,32 @@ pub fn generate_synthetic_ranged(seed: u64, kind: ProfileKind) -> FinancialProfi
 
     let days_until_salary = rand_range(&mut s, 1, 30) as u8;
 
-    let total_expenses = card_bill_cents + pending_bills_cents
-        + estimated_variable_spend_cents + monthly_savings_goal_cents;
+    let total_expenses = card_bill_cents
+        + pending_bills_cents
+        + estimated_variable_spend_cents
+        + monthly_savings_goal_cents;
     let budget = monthly_income_cents * 90 / 100;
-    let (card_bill_cents, pending_bills_cents, estimated_variable_spend_cents, monthly_savings_goal_cents) =
-        if total_expenses > budget {
-            let scale = |v: u64| (v as u128 * budget as u128 / total_expenses as u128) as u64;
-            (scale(card_bill_cents), scale(pending_bills_cents),
-             scale(estimated_variable_spend_cents), scale(monthly_savings_goal_cents))
-        } else {
-            (card_bill_cents, pending_bills_cents, estimated_variable_spend_cents, monthly_savings_goal_cents)
-        };
+    let (
+        card_bill_cents,
+        pending_bills_cents,
+        estimated_variable_spend_cents,
+        monthly_savings_goal_cents,
+    ) = if total_expenses > budget {
+        let scale = |v: u64| (v as u128 * budget as u128 / total_expenses as u128) as u64;
+        (
+            scale(card_bill_cents),
+            scale(pending_bills_cents),
+            scale(estimated_variable_spend_cents),
+            scale(monthly_savings_goal_cents),
+        )
+    } else {
+        (
+            card_bill_cents,
+            pending_bills_cents,
+            estimated_variable_spend_cents,
+            monthly_savings_goal_cents,
+        )
+    };
 
     FinancialProfile {
         card_bill_cents,
@@ -332,18 +352,27 @@ mod tests {
 
     #[test]
     fn profile_kind_from_str() {
-        assert_eq!(ProfileKind::from_str("student"),  ProfileKind::Student);
-        assert_eq!(ProfileKind::from_str("family"),   ProfileKind::Family);
-        assert_eq!(ProfileKind::from_str("anything"), ProfileKind::YoungProfessional);
+        assert_eq!(ProfileKind::from_str("student"), ProfileKind::Student);
+        assert_eq!(ProfileKind::from_str("family"), ProfileKind::Family);
+        assert_eq!(
+            ProfileKind::from_str("anything"),
+            ProfileKind::YoungProfessional
+        );
     }
 
     #[test]
     fn expenses_never_exceed_90_pct_of_income() {
         for seed in [1u64, 42, 999, 123_456, u64::MAX / 2] {
-            for kind in [ProfileKind::Student, ProfileKind::YoungProfessional, ProfileKind::Family] {
+            for kind in [
+                ProfileKind::Student,
+                ProfileKind::YoungProfessional,
+                ProfileKind::Family,
+            ] {
                 let p = generate_synthetic_ranged(seed, kind);
-                let total = p.card_bill_cents + p.pending_bills_cents
-                    + p.estimated_variable_spend_cents + p.monthly_savings_goal_cents;
+                let total = p.card_bill_cents
+                    + p.pending_bills_cents
+                    + p.estimated_variable_spend_cents
+                    + p.monthly_savings_goal_cents;
                 assert!(
                     total <= p.monthly_income_cents * 90 / 100,
                     "seed={seed} kind={kind:?}: expenses {total} > 90% of income {}",

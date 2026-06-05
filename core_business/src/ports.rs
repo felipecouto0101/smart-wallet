@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 
-use async_trait::async_trait;
-use crate::domain::user::{UserId, User, CreateUserDto};
-use crate::domain::wallet::Wallet;
 use crate::domain::asset::Asset;
-use crate::domain::order::Order;
 use crate::domain::financial_profile::FinancialProfile;
+use crate::domain::order::Order;
+use crate::domain::user::{CreateUserDto, User, UserId};
+use crate::domain::wallet::Wallet;
 use crate::errors::BusinessError;
+use async_trait::async_trait;
 
 /// Persistence contract for users.
 #[async_trait]
@@ -49,5 +49,9 @@ pub trait PriceProvider: Send + Sync {
 pub trait FinancialProfileRepository: Send + Sync {
     async fn get_or_generate(&self, user_id: &UserId) -> Result<FinancialProfile, BusinessError>;
     async fn find_only(&self, user_id: &UserId) -> Result<Option<FinancialProfile>, BusinessError>;
-    async fn upsert_profile(&self, user_id: &UserId, p: &FinancialProfile) -> Result<(), BusinessError>;
+    async fn upsert_profile(
+        &self,
+        user_id: &UserId,
+        p: &FinancialProfile,
+    ) -> Result<(), BusinessError>;
 }

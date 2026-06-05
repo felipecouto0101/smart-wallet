@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
 use askama::Template;
 use askama_axum::IntoResponse;
 use axum::{
@@ -10,14 +9,15 @@ use axum::{
 };
 use secrecy::SecretString;
 use serde::Deserialize;
+use std::sync::Arc;
 
-use core_business::domain::user::CreateUserDto;
-use core_business::domain::order::OrderType;
-use core_business::fmt_brl;
-use infra_data::repositories::user::verify_password;
-use infra_data::{ProfileKind, generate_for_kind};
 use crate::auth::{generate_token, validate_token, JWT_COOKIE};
 use crate::state::AppState;
+use core_business::domain::order::OrderType;
+use core_business::domain::user::CreateUserDto;
+use core_business::fmt_brl;
+use infra_data::repositories::user::verify_password;
+use infra_data::{generate_for_kind, ProfileKind};
 
 // ── Template structs ────────────────────────────────────────────────────────
 
@@ -115,7 +115,11 @@ fn pnl(current_price_cents: u64, avg_cost_cents: f64, quantity: f64) -> (String,
     let current_total = current_price_cents as f64 * quantity;
     let cost_total = avg_cost_cents * quantity;
     let diff = current_total - cost_total;
-    let pct = if cost_total > 0.0 { diff / cost_total * 100.0 } else { 0.0 };
+    let pct = if cost_total > 0.0 {
+        diff / cost_total * 100.0
+    } else {
+        0.0
+    };
     let positive = diff >= 0.0;
     let abs_diff = diff.abs().round() as u64;
     let sign = if positive { "+" } else { "-" };
@@ -140,9 +144,12 @@ fn get_user_id(headers: &HeaderMap, secret: &str) -> Option<core_business::UserI
 }
 
 fn set_jwt_cookie(token: &str) -> axum::http::HeaderValue {
-    format!("{}={}; HttpOnly; Path=/; SameSite=Strict", JWT_COOKIE, token)
-        .parse()
-        .unwrap()
+    format!(
+        "{}={}; HttpOnly; Path=/; SameSite=Strict",
+        JWT_COOKIE, token
+    )
+    .parse()
+    .unwrap()
 }
 
 // ── Page handlers ────────────────────────────────────────────────────────────
@@ -167,23 +174,35 @@ pub async fn post_login(
 ) -> Response {
     let user = match state.user_repo.find_by_email(&form.email).await {
         Ok(u) => u,
-        Err(_) => return LoginPage { error: Some("Invalid credentials".into()) }.into_response(),
+        Err(_) => {
+            return LoginPage {
+                error: Some("Invalid credentials".into()),
+            }
+            .into_response()
+        }
     };
 
     if !verify_password(&SecretString::from(form.password), &user.password_hash) {
-        return LoginPage { error: Some("Invalid credentials".into()) }.into_response();
+        return LoginPage {
+            error: Some("Invalid credentials".into()),
+        }
+        .into_response();
     }
 
     let token = match generate_token(&user.id.0, &state.jwt_secret) {
         Ok(t) => t,
-        Err(_) => return LoginPage { error: Some("Internal error".into()) }.into_response(),
+        Err(_) => {
+            return LoginPage {
+                error: Some("Internal error".into()),
+            }
+            .into_response()
+        }
     };
 
     let mut response = Redirect::to("/wallet").into_response();
-    response.headers_mut().insert(
-        axum::http::header::SET_COOKIE,
-        set_jwt_cookie(&token),
-    );
+    response
+        .headers_mut()
+        .insert(axum::http::header::SET_COOKIE, set_jwt_cookie(&token));
     response
 }
 
@@ -206,7 +225,10 @@ pub async fn post_register(
 
     match state.user_repo.create(dto).await {
         Ok(_) => Redirect::to("/login").into_response(),
-        Err(e) => RegisterPage { error: Some(e.to_string()) }.into_response(),
+        Err(e) => RegisterPage {
+            error: Some(e.to_string()),
+        }
+        .into_response(),
     }
 }
 
@@ -221,44 +243,65 @@ pub async fn get_assets(
 
     let asset_list = state.asset_repo.list_all().await.unwrap_or_default();
     let wallet = state.wallet_repo.find(&id).await.ok();
-    let orders = state.wallet_repo.order_history(&id).await.unwrap_or_default();
+    let orders = state
+        .wallet_repo
+        .order_history(&id)
+        .await
+        .unwrap_or_default();
 
     AssetsPage {
-        assets: asset_list.iter().map(|a| AssetView {
-            symbol: a.asset_type.symbol().to_string(),
-            name: a.asset_type.name().to_string(),
-            price_display: cents_to_display(a.price_cents),
-            price_cents: a.price_cents,
-        }).collect(),
-        positions: wallet.as_ref().map(|w| w.positions.values().map(|p| {
-            let price_cents = asset_list.iter()
-                .find(|a| a.asset_type == p.asset_type)
-                .map(|a| a.price_cents)
-                .unwrap_or(0);
-            let (pnl_display, pnl_pct, pnl_positive) = pnl(price_cents, p.avg_cost_cents, p.quantity);
-            PositionView {
-                symbol: p.asset_type.symbol().to_string(),
-                quantity: p.quantity,
-                price_cents,
-                price_display: cents_to_display(price_cents),
-                total_display: total_to_display(price_cents, p.quantity),
-                avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
-                pnl_display,
-                pnl_pct,
-                pnl_positive,
-            }
-        }).collect()).unwrap_or_default(),
-        orders: orders.iter().map(|o| OrderView {
-            is_buy: o.order_type == OrderType::Buy,
-            symbol: o.asset.symbol().to_string(),
-            quantity: o.quantity,
-            unit_price_display: cents_to_display(o.price_cents),
-            total_display: total_to_display(o.price_cents, o.quantity),
-        }).collect(),
+        assets: asset_list
+            .iter()
+            .map(|a| AssetView {
+                symbol: a.asset_type.symbol().to_string(),
+                name: a.asset_type.name().to_string(),
+                price_display: cents_to_display(a.price_cents),
+                price_cents: a.price_cents,
+            })
+            .collect(),
+        positions: wallet
+            .as_ref()
+            .map(|w| {
+                w.positions
+                    .values()
+                    .map(|p| {
+                        let price_cents = asset_list
+                            .iter()
+                            .find(|a| a.asset_type == p.asset_type)
+                            .map(|a| a.price_cents)
+                            .unwrap_or(0);
+                        let (pnl_display, pnl_pct, pnl_positive) =
+                            pnl(price_cents, p.avg_cost_cents, p.quantity);
+                        PositionView {
+                            symbol: p.asset_type.symbol().to_string(),
+                            quantity: p.quantity,
+                            price_cents,
+                            price_display: cents_to_display(price_cents),
+                            total_display: total_to_display(price_cents, p.quantity),
+                            avg_cost_display: cents_to_display(p.avg_cost_cents.round() as u64),
+                            pnl_display,
+                            pnl_pct,
+                            pnl_positive,
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        orders: orders
+            .iter()
+            .map(|o| OrderView {
+                is_buy: o.order_type == OrderType::Buy,
+                symbol: o.asset.symbol().to_string(),
+                quantity: o.quantity,
+                unit_price_display: cents_to_display(o.price_cents),
+                total_display: total_to_display(o.price_cents, o.quantity),
+            })
+            .collect(),
         balance_display: cents_to_display(wallet.map(|w| w.balance_cents).unwrap_or(0)),
         message: params.get("msg").cloned(),
         error: params.get("err").map(|e| e.replace('+', " ")),
-    }.into_response()
+    }
+    .into_response()
 }
 
 pub async fn get_wallet(
@@ -282,7 +325,8 @@ pub async fn get_wallet(
         message: params.get("msg").cloned(),
         error: params.get("err").map(|e| e.replace('+', " ")),
         sim_profile,
-    }.into_response()
+    }
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -293,7 +337,9 @@ pub struct TradeForm {
 
 fn parse_quantity(s: &str) -> Result<f64, String> {
     let normalized = s.trim().replace(',', ".");
-    let q: f64 = normalized.parse().map_err(|_| "Invalid quantity".to_string())?;
+    let q: f64 = normalized
+        .parse()
+        .map_err(|_| "Invalid quantity".to_string())?;
     if q <= 0.0 || !q.is_finite() {
         return Err("Quantity must be greater than zero".to_string());
     }
@@ -311,23 +357,35 @@ pub async fn post_buy(
 
     let quantity = match parse_quantity(&form.quantity) {
         Ok(q) => q,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response()
+        }
     };
 
     let asset = match state.asset_repo.find_price(&form.symbol).await {
         Ok(a) => a,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+")))
+                .into_response()
+        }
     };
 
     let mut wallet = match state.wallet_repo.find(&id).await {
         Ok(w) => w,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+")))
+                .into_response()
+        }
     };
 
     match wallet.buy(&asset.asset_type, quantity, asset.price_cents) {
         Ok(()) => {
             let order = core_business::domain::order::Order::new(
-                id.clone(), OrderType::Buy, asset.asset_type, quantity, asset.price_cents,
+                id.clone(),
+                OrderType::Buy,
+                asset.asset_type,
+                quantity,
+                asset.price_cents,
             );
             let _ = state.wallet_repo.save(&wallet).await;
             let _ = state.wallet_repo.record_order(&order).await;
@@ -351,23 +409,35 @@ pub async fn post_sell(
 
     let quantity = match parse_quantity(&form.quantity) {
         Ok(q) => q,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.replace(' ', "+"))).into_response()
+        }
     };
 
     let asset = match state.asset_repo.find_price(&form.symbol).await {
         Ok(a) => a,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+")))
+                .into_response()
+        }
     };
 
     let mut wallet = match state.wallet_repo.find(&id).await {
         Ok(w) => w,
-        Err(e) => return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+"))).into_response(),
+        Err(e) => {
+            return Redirect::to(&format!("/assets?err={}", e.to_string().replace(' ', "+")))
+                .into_response()
+        }
     };
 
     match wallet.sell(&asset.asset_type, quantity, asset.price_cents) {
         Ok(()) => {
             let order = core_business::domain::order::Order::new(
-                id.clone(), OrderType::Sell, asset.asset_type, quantity, asset.price_cents,
+                id.clone(),
+                OrderType::Sell,
+                asset.asset_type,
+                quantity,
+                asset.price_cents,
             );
             let _ = state.wallet_repo.save(&wallet).await;
             let _ = state.wallet_repo.record_order(&order).await;
@@ -417,22 +487,35 @@ async fn load_sim_profile(
     Some(SimProfileSummary {
         income: fmt_brl(profile.monthly_income_cents),
         expenses: vec![
-            SimExpenseView { label: "Card bill".into(),         amount: fmt_brl(profile.card_bill_cents) },
-            SimExpenseView { label: "Pending bills (15d)".into(), amount: fmt_brl(profile.pending_bills_cents) },
-            SimExpenseView { label: "Variable expenses".into(),  amount: fmt_brl(profile.estimated_variable_spend_cents) },
-            SimExpenseView { label: "Savings goal".into(),       amount: fmt_brl(profile.monthly_savings_goal_cents) },
-            SimExpenseView { label: "Invested".into(),           amount: fmt_brl(invested) },
+            SimExpenseView {
+                label: "Card bill".into(),
+                amount: fmt_brl(profile.card_bill_cents),
+            },
+            SimExpenseView {
+                label: "Pending bills (15d)".into(),
+                amount: fmt_brl(profile.pending_bills_cents),
+            },
+            SimExpenseView {
+                label: "Variable expenses".into(),
+                amount: fmt_brl(profile.estimated_variable_spend_cents),
+            },
+            SimExpenseView {
+                label: "Savings goal".into(),
+                amount: fmt_brl(profile.monthly_savings_goal_cents),
+            },
+            SimExpenseView {
+                label: "Invested".into(),
+                amount: fmt_brl(invested),
+            },
         ],
     })
 }
 
-pub async fn get_logout() -> Response {    let clear = format!("{}=; HttpOnly; Path=/; Max-Age=0", JWT_COOKIE);
+pub async fn get_logout() -> Response {
+    let clear = format!("{}=; HttpOnly; Path=/; Max-Age=0", JWT_COOKIE);
     let mut response = Redirect::to("/login").into_response();
-    response.headers_mut().insert(
-        axum::http::header::SET_COOKIE,
-        clear.parse().unwrap(),
-    );
+    response
+        .headers_mut()
+        .insert(axum::http::header::SET_COOKIE, clear.parse().unwrap());
     response
 }
-
-

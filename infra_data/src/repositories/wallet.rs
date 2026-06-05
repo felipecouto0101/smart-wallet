@@ -2,15 +2,15 @@
 
 use async_trait::async_trait;
 use sqlx::PgPool;
-use tracing::instrument;
 use std::collections::HashMap;
+use tracing::instrument;
 
 use core_business::{
-    BusinessError, UserId,
-    domain::wallet::{Wallet, Position},
     domain::asset::AssetType,
     domain::order::Order,
+    domain::wallet::{Position, Wallet},
     ports::WalletRepository,
+    BusinessError, UserId,
 };
 
 pub struct WalletRepositoryPg {
@@ -39,13 +39,11 @@ struct PositionRow {
 impl WalletRepository for WalletRepositoryPg {
     #[instrument(skip(self))]
     async fn find(&self, user_id: &UserId) -> Result<Wallet, BusinessError> {
-        let row: WalletRow = sqlx::query_as(
-            "SELECT balance_cents FROM wallets WHERE user_id = $1",
-        )
-        .bind(user_id.0)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|_| BusinessError::UserNotFound)?;
+        let row: WalletRow = sqlx::query_as("SELECT balance_cents FROM wallets WHERE user_id = $1")
+            .bind(user_id.0)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|_| BusinessError::UserNotFound)?;
 
         let position_rows: Vec<PositionRow> = sqlx::query_as(
             "SELECT symbol, quantity, avg_cost_cents FROM positions WHERE user_id = $1",
@@ -58,11 +56,14 @@ impl WalletRepository for WalletRepositoryPg {
         let mut positions = HashMap::new();
         for p in position_rows {
             let asset_type = symbol_to_asset_type(&p.symbol)?;
-            positions.insert(p.symbol.clone(), Position {
-                asset_type,
-                quantity: p.quantity,
-                avg_cost_cents: p.avg_cost_cents,
-            });
+            positions.insert(
+                p.symbol.clone(),
+                Position {
+                    asset_type,
+                    quantity: p.quantity,
+                    avg_cost_cents: p.avg_cost_cents,
+                },
+            );
         }
 
         Ok(Wallet {
@@ -74,25 +75,21 @@ impl WalletRepository for WalletRepositoryPg {
 
     #[instrument(skip(self))]
     async fn save(&self, wallet: &Wallet) -> Result<(), BusinessError> {
-        sqlx::query(
-            "UPDATE wallets SET balance_cents = $1 WHERE user_id = $2",
-        )
-        .bind(wallet.balance_cents as i64)
-        .bind(wallet.user_id.0)
-        .execute(&self.pool)
-        .await
-        .map_err(|_| BusinessError::UserNotFound)?;
+        sqlx::query("UPDATE wallets SET balance_cents = $1 WHERE user_id = $2")
+            .bind(wallet.balance_cents as i64)
+            .bind(wallet.user_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| BusinessError::UserNotFound)?;
 
         for (symbol, position) in &wallet.positions {
             if position.quantity <= 0.0 {
-                sqlx::query(
-                    "DELETE FROM positions WHERE user_id = $1 AND symbol = $2",
-                )
-                .bind(wallet.user_id.0)
-                .bind(symbol)
-                .execute(&self.pool)
-                .await
-                .map_err(|_| BusinessError::UserNotFound)?;
+                sqlx::query("DELETE FROM positions WHERE user_id = $1 AND symbol = $2")
+                    .bind(wallet.user_id.0)
+                    .bind(symbol)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|_| BusinessError::UserNotFound)?;
             } else {
                 sqlx::query(
                     r#"

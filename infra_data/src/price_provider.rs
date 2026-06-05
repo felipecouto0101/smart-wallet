@@ -71,10 +71,10 @@ impl PriceProvider for LivePriceProvider {
         info!(btc, eth, sol, usd, "live prices updated (cents BRL)");
 
         Ok(vec![
-            Asset::new(AssetType::Bitcoin,  btc),
+            Asset::new(AssetType::Bitcoin, btc),
             Asset::new(AssetType::Ethereum, eth),
-            Asset::new(AssetType::Solana,   sol),
-            Asset::new(AssetType::Dollar,   usd),
+            Asset::new(AssetType::Solana, sol),
+            Asset::new(AssetType::Dollar, usd),
         ])
     }
 }
@@ -82,9 +82,7 @@ impl PriceProvider for LivePriceProvider {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async fn fetch_binance(client: &Client, symbol: &str) -> Result<f64, BusinessError> {
-    let url = format!(
-        "https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-    );
+    let url = format!("https://api.binance.com/api/v3/ticker/price?symbol={symbol}");
 
     let text = client
         .get(&url)
@@ -95,15 +93,14 @@ async fn fetch_binance(client: &Client, symbol: &str) -> Result<f64, BusinessErr
         .await
         .map_err(|e| BusinessError::PriceFetchError(e.to_string()))?;
 
-    let ticker: BinanceTicker = serde_json::from_str(&text)
-        .map_err(|e| BusinessError::PriceFetchError(
-            format!("binance parse ({symbol}): {e} — body: {text}")
-        ))?;
+    let ticker: BinanceTicker = serde_json::from_str(&text).map_err(|e| {
+        BusinessError::PriceFetchError(format!("binance parse ({symbol}): {e} — body: {text}"))
+    })?;
 
-    ticker.price.parse::<f64>()
-        .map_err(|e| BusinessError::PriceFetchError(
-            format!("binance price parse ({symbol}): {e}")
-        ))
+    ticker
+        .price
+        .parse::<f64>()
+        .map_err(|e| BusinessError::PriceFetchError(format!("binance price parse ({symbol}): {e}")))
 }
 
 async fn fetch_awesome(client: &Client) -> Result<f64, BusinessError> {
@@ -124,12 +121,13 @@ async fn fetch_awesome(client: &Client) -> Result<f64, BusinessError> {
         .await
         .map_err(|e| BusinessError::PriceFetchError(e.to_string()))?;
 
-    let resp: Wrapper = serde_json::from_str(&text)
-        .map_err(|e| BusinessError::PriceFetchError(
-            format!("awesomeapi parse: {e} — body: {text}")
-        ))?;
+    let resp: Wrapper = serde_json::from_str(&text).map_err(|e| {
+        BusinessError::PriceFetchError(format!("awesomeapi parse: {e} — body: {text}"))
+    })?;
 
-    resp.usdbrl.bid.parse::<f64>()
+    resp.usdbrl
+        .bid
+        .parse::<f64>()
         .map_err(|e| BusinessError::PriceFetchError(format!("awesomeapi bid parse: {e}")))
 }
 
@@ -137,9 +135,9 @@ async fn fetch_awesome(client: &Client) -> Result<f64, BusinessError> {
 fn usdt_to_brl_cents(usdt: f64, usd_brl: f64, symbol: &str) -> Result<u64, BusinessError> {
     if usdt <= 0.0 || usd_brl <= 0.0 {
         warn!(symbol, "invalid price, skipping");
-        return Err(BusinessError::PriceFetchError(
-            format!("invalid price for {symbol}")
-        ));
+        return Err(BusinessError::PriceFetchError(format!(
+            "invalid price for {symbol}"
+        )));
     }
     Ok((usdt * usd_brl * 100.0).round() as u64)
 }
@@ -147,9 +145,9 @@ fn usdt_to_brl_cents(usdt: f64, usd_brl: f64, symbol: &str) -> Result<u64, Busin
 fn price_cents(value: f64, symbol: &str) -> Result<u64, BusinessError> {
     if value <= 0.0 {
         warn!(symbol, "price unavailable");
-        return Err(BusinessError::PriceFetchError(
-            format!("no price available for {symbol}")
-        ));
+        return Err(BusinessError::PriceFetchError(format!(
+            "no price available for {symbol}"
+        )));
     }
     Ok((value * 100.0).round() as u64)
 }

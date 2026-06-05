@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use secrecy::SecretString;
 use validator::Validate;
 
 /// Newtype for user ID — prevents parameter confusion attacks.
@@ -48,15 +48,20 @@ pub struct User {
 
 impl User {
     pub fn new(id: UserId, name: String, email: String, password_hash: SecretString) -> Self {
-        Self { id, name, email, password_hash }
+        Self {
+            id,
+            name,
+            email,
+            password_hash,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secrecy::ExposeSecret;
     use pretty_assertions::assert_eq;
+    use secrecy::ExposeSecret;
 
     #[test]
     fn user_id_generates_unique_uuids() {
@@ -69,7 +74,12 @@ mod tests {
     fn user_preserves_fields() {
         let id = UserId::new();
         let hash = SecretString::from("bcrypt_hash");
-        let user = User::new(id.clone(), "Alice".to_string(), "alice@email.com".to_string(), hash);
+        let user = User::new(
+            id.clone(),
+            "Alice".to_string(),
+            "alice@email.com".to_string(),
+            hash,
+        );
         assert_eq!(user.name, "Alice");
         assert_eq!(user.email, "alice@email.com");
         assert_eq!(user.id, id);
