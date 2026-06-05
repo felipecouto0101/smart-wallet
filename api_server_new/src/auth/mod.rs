@@ -25,7 +25,10 @@ pub fn generate_token(user_id: &Uuid, secret: &str) -> Result<String, BusinessEr
         .expect("valid timestamp")
         .timestamp() as usize;
 
-    let claims = Claims { sub: user_id.to_string(), exp: expiry };
+    let claims = Claims {
+        sub: user_id.to_string(),
+        exp: expiry,
+    };
 
     encode(
         &Header::default(),
@@ -49,7 +52,7 @@ pub fn validate_token(token: &str, secret: &str) -> Result<Claims, BusinessError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use claim::assert_ok;
+    use claims::assert_ok;
     use pretty_assertions::assert_eq;
 
     #[test]

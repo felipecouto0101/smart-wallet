@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use core_business::{Asset, AssetType, BusinessError, PriceProvider, ports::AssetRepository};
+use core_business::{ports::AssetRepository, Asset, AssetType, BusinessError, PriceProvider};
 
 /// Thread-safe in-memory cache of asset prices.
 /// Updated by the background task via `update_prices`.
@@ -28,10 +28,10 @@ impl AssetRepositoryPg {
 
     fn fallback() -> Vec<Asset> {
         vec![
-            Asset::new(AssetType::Bitcoin,  35_000_000),
-            Asset::new(AssetType::Ethereum,  1_800_000),
-            Asset::new(AssetType::Solana,       70_000),
-            Asset::new(AssetType::Dollar,        5_100),
+            Asset::new(AssetType::Bitcoin, 35_000_000),
+            Asset::new(AssetType::Ethereum, 1_800_000),
+            Asset::new(AssetType::Solana, 70_000),
+            Asset::new(AssetType::Dollar, 5_100),
         ]
     }
 }
@@ -61,10 +61,7 @@ impl AssetRepository for AssetRepositoryPg {
 
 /// Updates the cache using the given provider.
 /// Called by the background task in `main.rs`.
-pub async fn update_prices(
-    cache: &Arc<RwLock<Vec<Asset>>>,
-    provider: &dyn PriceProvider,
-) {
+pub async fn update_prices(cache: &Arc<RwLock<Vec<Asset>>>, provider: &dyn PriceProvider) {
     match provider.fetch_prices().await {
         Ok(prices) => {
             *cache.write().await = prices;
@@ -79,7 +76,7 @@ pub async fn update_prices(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use claim::{assert_ok, assert_err};
+    use claims::{assert_err, assert_ok};
     use mockall::mock;
     use pretty_assertions::assert_eq;
 
@@ -93,10 +90,10 @@ mod tests {
 
     fn mock_assets() -> Vec<Asset> {
         vec![
-            Asset::new(AssetType::Bitcoin,  40_000_000),
-            Asset::new(AssetType::Ethereum,  2_000_000),
-            Asset::new(AssetType::Solana,       80_000),
-            Asset::new(AssetType::Dollar,        5_500),
+            Asset::new(AssetType::Bitcoin, 40_000_000),
+            Asset::new(AssetType::Ethereum, 2_000_000),
+            Asset::new(AssetType::Solana, 80_000),
+            Asset::new(AssetType::Dollar, 5_500),
         ]
     }
 
@@ -131,14 +128,19 @@ mod tests {
         update_prices(&cache, &mock).await;
 
         let prices = cache.read().await;
-        let btc = prices.iter().find(|a| a.asset_type == AssetType::Bitcoin).unwrap();
+        let btc = prices
+            .iter()
+            .find(|a| a.asset_type == AssetType::Bitcoin)
+            .unwrap();
         assert_eq!(btc.price_cents, 40_000_000);
     }
 
     #[tokio::test]
     async fn update_prices_keeps_cache_on_error() {
         let cache = Arc::new(RwLock::new(AssetRepositoryPg::fallback()));
-        let original_btc = cache.read().await
+        let original_btc = cache
+            .read()
+            .await
             .iter()
             .find(|a| a.asset_type == AssetType::Bitcoin)
             .unwrap()
@@ -151,7 +153,9 @@ mod tests {
 
         update_prices(&cache, &mock).await;
 
-        let btc = cache.read().await
+        let btc = cache
+            .read()
+            .await
             .iter()
             .find(|a| a.asset_type == AssetType::Bitcoin)
             .unwrap()

@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::domain::asset::AssetType;
 use crate::domain::user::UserId;
 use crate::errors::BusinessError;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// A position in a specific asset.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -67,12 +67,17 @@ impl Wallet {
         let position = self
             .positions
             .entry(asset_type.symbol().to_string())
-            .or_insert(Position { asset_type: asset_type.clone(), quantity: 0.0, avg_cost_cents: 0.0 });
+            .or_insert(Position {
+                asset_type: asset_type.clone(),
+                quantity: 0.0,
+                avg_cost_cents: 0.0,
+            });
 
         // weighted average cost: (old_qty * old_avg + new_qty * price) / total_qty
         let new_qty = position.quantity + quantity;
         position.avg_cost_cents = (position.quantity * position.avg_cost_cents
-            + quantity * unit_price_cents as f64) / new_qty;
+            + quantity * unit_price_cents as f64)
+            / new_qty;
         position.quantity = new_qty;
         Ok(())
     }
@@ -108,8 +113,8 @@ impl Wallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use claims::{assert_err, assert_ok};
     use pretty_assertions::assert_eq;
-    use claim::{assert_ok, assert_err};
     use proptest::prelude::*;
 
     fn test_wallet() -> Wallet {

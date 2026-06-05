@@ -20,5 +20,5 @@ thiserror     = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-claim             = { workspace = true }
+claims            = { workspace = true }
 mockall           = { workspace = true }

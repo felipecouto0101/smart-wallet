@@ -43,7 +43,7 @@ time               = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-claim             = { workspace = true }
+claims            = { workspace = true }
 mockall           = { workspace = true }
 proptest          = { workspace = true }
 tokio             = { workspace = true }
