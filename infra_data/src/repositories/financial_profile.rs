@@ -148,14 +148,18 @@ pub enum ProfileKind {
     Family,
 }
 
-impl ProfileKind {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for ProfileKind {
+    type Err = std::convert::Infallible;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "student" => Self::Student,
             "family" => Self::Family,
             _ => Self::YoungProfessional,
-        }
+        })
     }
+}
+
+impl ProfileKind {
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -352,10 +356,10 @@ mod tests {
 
     #[test]
     fn profile_kind_from_str() {
-        assert_eq!(ProfileKind::from_str("student"), ProfileKind::Student);
-        assert_eq!(ProfileKind::from_str("family"), ProfileKind::Family);
+        assert_eq!("student".parse::<ProfileKind>().unwrap(), ProfileKind::Student);
+        assert_eq!("family".parse::<ProfileKind>().unwrap(), ProfileKind::Family);
         assert_eq!(
-            ProfileKind::from_str("anything"),
+            "anything".parse::<ProfileKind>().unwrap(),
             ProfileKind::YoungProfessional
         );
     }

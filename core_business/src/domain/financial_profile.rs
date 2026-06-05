@@ -146,7 +146,7 @@ pub fn analyze_purchase(
     let shortfall = after_purchase.unsigned_abs();
 
     let installment_suggestion = (2u8..=6).find_map(|n| {
-        let per_installment = (purchase_cents + n as u64 - 1) / n as u64;
+        let per_installment = purchase_cents.div_ceil(n as u64);
         let projected_free_monthly = (profile.monthly_income_cents as i64
             - profile.card_bill_cents as i64
             - profile.pending_bills_cents as i64
